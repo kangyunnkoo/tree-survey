@@ -41,6 +41,12 @@ async function sendLocation() {
       } else {
         status.innerText = "❌ Make Webhook 오류";
       }
+
+    // 시도: 창 닫기
+    window.close();
+    // 혹시 안 닫히면 메시지 표시
+    document.body.innerHTML = "<h3>위치 전송 완료 ✅ 창을 닫아주세요.</h3>";
+      
     } catch(e) {
       status.innerText = "❌ 네트워크 오류: " + e.message;
     }
@@ -51,4 +57,5 @@ async function sendLocation() {
 </script>
 </body>
 </html>
+
 
