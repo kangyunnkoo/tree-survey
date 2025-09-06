@@ -1,49 +1,53 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <title>위치 기록</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; margin-top: 50px; }
-  </style>
-  <script>
-    async function sendLocation() {
-      const params = new URLSearchParams(window.location.search);
-      const pageId = params.get("pageId");
-
-      if (!pageId) {
-        document.body.innerHTML = "<h3>❌ Page ID 없음</h3>";
-        return;
-      }
-
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async (pos) => {
-          const lat = pos.coords.latitude.toFixed(6);
-          const lon = pos.coords.longitude.toFixed(6);
-
-          try {
-            await fetch("https://hook.eu2.make.com/s85g5o1q14gtl1omx0w58rngpb9if7t5", {   // ✅ Make Webhook URL
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ pageId, lat, lon })
-            });
-
-            document.body.innerHTML = `<h3>✅ 위치 기록 완료</h3><p>${lat}, ${lon}</p>`;
-          } catch (err) {
-            document.body.innerHTML = `<h3>⚠️ 오류 발생</h3><p>${err}</p>`;
-          }
-        }, (err) => {
-          document.body.innerHTML = `<h3>⚠️ 위치 접근 거부</h3><p>${err.message}</p>`;
-        });
-      } else {
-        document.body.innerHTML = "<h3>❌ 위치 정보 미지원</h3>";
-      }
-    }
-    window.onload = sendLocation;
-  </script>
+<meta charset="UTF-8">
+<title>위치 기록</title>
+<style>
+body { font-family: sans-serif; text-align: center; margin-top: 50px; }
+button { padding: 12px 24px; font-size: 16px; }
+</style>
 </head>
 <body>
-  <p>위치를 가져오는 중...</p>
+<h1>GPS 위치 기록</h1>
+<p>아래 버튼을 눌러 현재 위치를 기록하세요.</p>
+<button onclick="sendLocation()">📍 위치 기록하기</button>
+<p id="status"></p>
+
+<script>
+async function sendLocation() {
+  const status = document.getElementById("status");
+  status.innerText = "위치 확인 중...";
+
+  if (!navigator.geolocation) {
+    status.innerText = "❌ GPS 지원 안됨";
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const lat = pos.coords.latitude.toFixed(6);
+    const lon = pos.coords.longitude.toFixed(6);
+
+    try {
+      // Make Webhook으로 좌표 전송
+      const res = await fetch("https://hook.make.com/xxxxxxxx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat, lon })
+      });
+
+      if (res.ok) {
+        status.innerText = `✅ 위치 전송 완료: ${lat}, ${lon}`;
+      } else {
+        status.innerText = "❌ Make Webhook 오류";
+      }
+    } catch(e) {
+      status.innerText = "❌ 네트워크 오류: " + e.message;
+    }
+  }, err => {
+    status.innerText = "❌ GPS 오류: " + err.message;
+  });
+}
+</script>
 </body>
 </html>
-
