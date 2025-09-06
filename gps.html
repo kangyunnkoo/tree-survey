@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>위치 기록</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 50px; }
+  </style>
+  <script>
+    async function sendLocation() {
+      const params = new URLSearchParams(window.location.search);
+      const pageId = params.get("pageId");
+
+      if (!pageId) {
+        document.body.innerHTML = "<h3>❌ Page ID 없음</h3>";
+        return;
+      }
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          const lat = pos.coords.latitude.toFixed(6);
+          const lon = pos.coords.longitude.toFixed(6);
+
+          try {
+            await fetch("https://hook.make.com/XXXXX", {   // ✅ Make Webhook URL
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ pageId, lat, lon })
+            });
+
+            document.body.innerHTML = `<h3>✅ 위치 기록 완료</h3><p>${lat}, ${lon}</p>`;
+          } catch (err) {
+            document.body.innerHTML = `<h3>⚠️ 오류 발생</h3><p>${err}</p>`;
+          }
+        }, (err) => {
+          document.body.innerHTML = `<h3>⚠️ 위치 접근 거부</h3><p>${err.message}</p>`;
+        });
+      } else {
+        document.body.innerHTML = "<h3>❌ 위치 정보 미지원</h3>";
+      }
+    }
+    window.onload = sendLocation;
+  </script>
+</head>
+<body>
+  <p>위치를 가져오는 중...</p>
+</body>
+</html>
