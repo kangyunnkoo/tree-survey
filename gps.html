@@ -44,9 +44,20 @@ async function sendLocation() {
 
       // 시도: 창 닫기
       window.close();
-      // 혹시 안 닫히면 메시지 표시
-      status.innerText = "<h3>위치 전송 완료 ✅ 창을 닫아주세요.</h3>";
-      
+      // 닫히지 않으면 안내 메시지 표시
+      setTimeout(() => {
+        if (!window.closed) {
+          status.innerHTML = `
+            ✅ 위치 전송이 완료되었습니다.<br>
+            <br>
+            👉 <a href="notion://">노션 앱으로 돌아가기</a><br>
+            (자동으로 노션으로 이동하지 않으면 위 링크를 눌러주세요.)
+          `;
+
+          // 모바일 환경에서 노션 앱 자동 복귀 시도
+          window.location.href = "notion://";
+        }
+      }, 500);      
     } catch(e) {
       status.innerText = "❌ 네트워크 오류: " + e.message;
     }
@@ -57,6 +68,7 @@ async function sendLocation() {
 </script>
 </body>
 </html>
+
 
 
 
