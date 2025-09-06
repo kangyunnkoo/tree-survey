@@ -22,7 +22,7 @@
           const lon = pos.coords.longitude.toFixed(6);
 
           try {
-            await fetch("https://hook.make.com/XXXXX", {   // ✅ Make Webhook URL
+            await fetch("https://hook.eu2.make.com/s85g5o1q14gtl1omx0w58rngpb9if7t5", {   // ✅ Make Webhook URL
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ pageId, lat, lon })
@@ -46,3 +46,4 @@
   <p>위치를 가져오는 중...</p>
 </body>
 </html>
+
