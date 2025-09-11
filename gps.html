@@ -30,7 +30,7 @@ async function sendLocation() {
 
     try {
       // Make Webhook으로 좌표 전송
-      const res = await fetch("https://hook.eu2.make.com/5g6kfjg1uu8vf91xtqqq51sprh190bf4", {
+      const res = await fetch("https://hook.eu2.make.com/s85g5o1q14gtl1omx0w58rngpb9if7t5", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lat, lon })
@@ -68,6 +68,7 @@ async function sendLocation() {
 </script>
 </body>
 </html>
+
 
 
 
