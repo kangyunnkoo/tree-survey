@@ -44,17 +44,17 @@
     const urlLat = parseFloat(params.get("lat"));
     const urlLng = parseFloat(params.get("lng"));
     const notionId = params.get("id");
-
+    alert("1");
     const map = new kakao.maps.Map(document.getElementById('map'), {
       center: new kakao.maps.LatLng(37.5665, 126.9780),
       level: 3
     });
-
+    alert("2");
     let marker = null;
     let selectedCoords = null;
     const coordsBox = document.getElementById("coords");
     const saveBtn = document.getElementById("saveBtn");
-    alert("yes");
+
     // URL 좌표 우선 → 없으면 현재 위치
     if (!isNaN(urlLat) && !isNaN(urlLng)) {
       map.setCenter(new kakao.maps.LatLng(urlLat, urlLng));
