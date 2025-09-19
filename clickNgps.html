@@ -54,7 +54,7 @@
     let selectedCoords = null;
     const coordsBox = document.getElementById("coords");
     const saveBtn = document.getElementById("saveBtn");
-
+    alert("yes");
     // URL 좌표 우선 → 없으면 현재 위치
     if (!isNaN(urlLat) && !isNaN(urlLng)) {
       map.setCenter(new kakao.maps.LatLng(urlLat, urlLng));
