@@ -2,20 +2,104 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Kakao Map Click Example</title>
-  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_APP_KEY"></script>
+  <title>수목 위치 선택</title>
+  <style>
+    #map { width:100%; height:85vh; }
+    #panel {
+      height: 15vh;
+      padding: 10px;
+      font-size: 14px;
+      background: #f4f4f4;
+      border-top: 1px solid #ccc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #coords { flex: 1; }
+    #saveBtn {
+      padding: 8px 14px;
+      font-size: 14px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #saveBtn:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+  </style>
+  <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_APP_KEY"></script>
 </head>
 <body>
-  <div id="map" style="width:100%;height:400px;"></div>
+  <div id="map"></div>
+  <div id="panel">
+    <div id="coords">지도에서 수목 위치를 클릭하세요.</div>
+    <button id="saveBtn" disabled>저장</button>
+  </div>
+
   <script>
-    var map = new kakao.maps.Map(document.getElementById('map'), {
+    const params = new URLSearchParams(window.location.search);
+    const urlLat = parseFloat(params.get("lat"));
+    const urlLng = parseFloat(params.get("lng"));
+    const notionId = params.get("id");
+
+    const map = new kakao.maps.Map(document.getElementById('map'), {
       center: new kakao.maps.LatLng(37.5665, 126.9780),
       level: 3
     });
 
+    let marker = null;
+    let selectedCoords = null;
+    const coordsBox = document.getElementById("coords");
+    const saveBtn = document.getElementById("saveBtn");
+
+    // URL 좌표 우선 → 없으면 현재 위치
+    if (!isNaN(urlLat) && !isNaN(urlLng)) {
+      map.setCenter(new kakao.maps.LatLng(urlLat, urlLng));
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(function(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const locPosition = new kakao.maps.LatLng(lat, lng);
+        map.setCenter(locPosition);
+        new kakao.maps.Marker({ map: map, position: locPosition });
+      });
+    }
+
+    // 지도 클릭 이벤트
     kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
-      var latlng = mouseEvent.latLng;
-      alert("위도: " + latlng.getLat() + ", 경도: " + latlng.getLng());
+      const latlng = mouseEvent.latLng;
+
+      if (marker) marker.setMap(null);
+      marker = new kakao.maps.Marker({
+        position: latlng,
+        map: map
+      });
+
+      selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
+      coordsBox.textContent = `선택된 좌표 → 위도: ${selectedCoords.lat.toFixed(6)}, 경도: ${selectedCoords.lng.toFixed(6)}`;
+      saveBtn.disabled = false;
+    });
+
+    // 저장 버튼 클릭 이벤트
+    saveBtn.addEventListener("click", function() {
+      if (!selectedCoords) return;
+
+      fetch("https://hook.integromat.com/YOUR_WEBHOOK_ID", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notionId: notionId,
+          latitude: selectedCoords.lat,
+          longitude: selectedCoords.lng
+        })
+      }).then(() => {
+        alert("좌표가 저장되었습니다!");
+        // 📌 노션 페이지로 자동 이동
+        window.location.href = `https://www.notion.so/${notionId}`;
+      }).catch(err => console.error(err));
     });
   </script>
 </body>
