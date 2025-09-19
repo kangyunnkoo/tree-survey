@@ -30,16 +30,16 @@
       cursor: not-allowed;
     }
   </style>
-  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=c869edfd3e17871184f35a648382891b"></script>
 </head>
 <body>
-  <p>aaaaaaaaaaaaa</p>
+
   <div id="map" style="width:100%;height:400px;"></div>
   <div id="panel">
     <div id="coords">지도에서 수목 위치를 클릭하세요.</div>
     <button id="saveBtn" disabled>저장</button>
   </div>
-  <p>bbbbbbbbbbbbbbb</p>
+
   <script>
     const params = new URLSearchParams(window.location.search);
     const urlLat = parseFloat(params.get("lat"));
