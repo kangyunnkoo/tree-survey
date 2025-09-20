@@ -46,18 +46,14 @@
     const urlLng = parseFloat(params.get("lng"));
     const notionId = params.get("id");
 
-    //const map = new kakao.maps.Map(document.getElementById('map'), {
-    //  center: new kakao.maps.LatLng(37.5665, 126.9780),
-    //  level: 3
-    //});
     var container = document.getElementById('map');
-		var options = {
-			center: new kakao.maps.LatLng(33.450701, 126.570667),
-			level: 3
-		};
+	var options = {
+		center: new kakao.maps.LatLng(33.450701, 126.570667),
+		level: 3
+	};
 
-		var map = new kakao.maps.Map(container, options);
-    alert("2");
+	var map = new kakao.maps.Map(container, options);
+
     let marker = null;
     let selectedCoords = null;
     const coordsBox = document.getElementById("coords");
