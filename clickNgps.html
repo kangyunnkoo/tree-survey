@@ -54,13 +54,9 @@
       const coordsBox = document.getElementById("coords");
       const saveBtn = document.getElementById("saveBtn");
 
-      // 마커 이미지
+      // 중심 마커 이미지 (빨간색)
       const centerImage = new kakao.maps.MarkerImage(
         "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png",
-        new kakao.maps.Size(24, 35)
-      );
-      const userImage = new kakao.maps.MarkerImage(
-        "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_blue.png",
         new kakao.maps.Size(24, 35)
       );
 
@@ -102,12 +98,13 @@
       kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
         const latlng = mouseEvent.latLng;
 
+        // 이전 사용자 마커 제거
         if (userMarker) userMarker.setMap(null);
 
+        // 기본 마커 사용
         userMarker = new kakao.maps.Marker({
           position: latlng,
-          map: map,
-          image: userImage
+          map: map
         });
 
         selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
