@@ -32,7 +32,7 @@
     }
   </style>
   <!-- 카카오맵 JS SDK -->
-  <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
 </head>
 <body>
   <div id="map"></div>
@@ -43,54 +43,71 @@
 
   <script>
     window.onload = function() {
-      const params = new URLSearchParams(window.location.search);
-      const urlLat = parseFloat(params.get("lat"));
-      const urlLng = parseFloat(params.get("lng"));
-      const notionId = params.get("id");
-
       const mapContainer = document.getElementById('map');
-
-      // 기본 지도 옵션 (서울 시청)
-      const mapOptions = {
-        center: new kakao.maps.LatLng(37.5665, 126.9780),
-        level: 3
-      };
-
+      const mapOptions = { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 3 };
       const map = new kakao.maps.Map(mapContainer, mapOptions);
-      let marker = null;
+
+      let centerMarker = null; // 현재 위치 마커
+      let userMarker = null;   // 사용자가 클릭한 마커
       let selectedCoords = null;
+
       const coordsBox = document.getElementById("coords");
       const saveBtn = document.getElementById("saveBtn");
 
-      // URL 좌표 우선
-      if (!isNaN(urlLat) && !isNaN(urlLng)) {
-        map.setCenter(new kakao.maps.LatLng(urlLat, urlLng));
-      }
-      // URL 없으면 현재 위치
-      else if (navigator.geolocation) {
+      // 마커 이미지
+      const centerImage = new kakao.maps.MarkerImage(
+        "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png",
+        new kakao.maps.Size(24, 35)
+      );
+      const userImage = new kakao.maps.MarkerImage(
+        "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_blue.png",
+        new kakao.maps.Size(24, 35)
+      );
+
+      // GPS로 현재 위치 가져오기
+      if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(position) {
           const lat = position.coords.latitude;
           const lng = position.coords.longitude;
           const locPosition = new kakao.maps.LatLng(lat, lng);
           map.setCenter(locPosition);
 
-          // 현재 위치 마커
-          new kakao.maps.Marker({ map: map, position: locPosition });
+          // 중심 마커 표시
+          centerMarker = new kakao.maps.Marker({
+            position: locPosition,
+            map: map,
+            image: centerImage
+          });
         }, function(error) {
           console.warn("현재 위치를 가져올 수 없습니다.", error);
+          const fallback = new kakao.maps.LatLng(37.5665, 126.9780);
+          map.setCenter(fallback);
+          centerMarker = new kakao.maps.Marker({
+            position: fallback,
+            map: map,
+            image: centerImage
+          });
+        });
+      } else {
+        const fallback = new kakao.maps.LatLng(37.5665, 126.9780);
+        map.setCenter(fallback);
+        centerMarker = new kakao.maps.Marker({
+          position: fallback,
+          map: map,
+          image: centerImage
         });
       }
 
-      // 지도 클릭 이벤트
+      // 지도 클릭 이벤트 (사용자 마커)
       kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
         const latlng = mouseEvent.latLng;
 
-        // 이전 마커 제거
-        if (marker) marker.setMap(null);
+        if (userMarker) userMarker.setMap(null);
 
-        marker = new kakao.maps.Marker({
+        userMarker = new kakao.maps.Marker({
           position: latlng,
-          map: map
+          map: map,
+          image: userImage
         });
 
         selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
@@ -102,6 +119,14 @@
       saveBtn.addEventListener("click", function() {
         if (!selectedCoords) return;
 
+        // URL에서 notionId 파라미터 받아오기
+        const params = new URLSearchParams(window.location.search);
+        const notionId = params.get("id");
+        if (!notionId) {
+          alert("노션 ID가 없습니다.");
+          return;
+        }
+
         fetch("https://hook.integromat.com/YOUR_WEBHOOK_ID", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -112,7 +137,7 @@
           })
         }).then(() => {
           alert("좌표가 저장되었습니다!");
-          // 노션 페이지로 자동 리다이렉트
+          // 노션 페이지 자동 리다이렉트
           window.location.href = `https://www.notion.so/${notionId}`;
         }).catch(err => console.error(err));
       });
