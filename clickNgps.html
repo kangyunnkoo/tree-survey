@@ -116,7 +116,7 @@
       saveBtn.addEventListener("click", function() {
         if (!selectedCoords) return;
 
-        fetch("https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1", {
+        fetch("https://hook.integromat.com/YOUR_WEBHOOK_ID", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -124,9 +124,9 @@
             longitude: selectedCoords.lng
           })
         }).then(() => {
-          //alert("좌표가 Webhook으로 전송되었습니다!");
+          alert("좌표가 Webhook으로 전송되었습니다!");
           // 필요 시 여기서 노션 리다이렉트 없이 종료 가능
-          window.close() 또는 안내 메시지 표시 가능
+          // window.close() 또는 안내 메시지 표시 가능
         }).catch(err => console.error(err));
       });
     }
