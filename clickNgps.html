@@ -117,7 +117,6 @@
       saveBtn.addEventListener("click", function() {
         if (!selectedCoords) return;
 
-        /*
         fetch("https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -129,24 +128,7 @@
           alert("좌표가 Webhook으로 전송되었습니다!");
           // 필요 시 여기서 노션 리다이렉트 없이 종료 가능
           //window.close() 또는 안내 메시지 표시 가능
-        }).catch(err => console.error(err));
-        */
-        fetch("https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
-            latitude: selectedCoords.lat,
-            longitude: selectedCoords.lng
-          })
-        })
-        .then(res => res.json())
-        .then(data => {
-          if(data.redirectUrl){
-            window.location.href = data.redirectUrl; // 노션 페이지로 이동
-          } else {
-            alert("좌표 전송 완료. 창을 닫아주세요.");
-          }
-        });
+        }).catch(err => console.error(err));        
       });
       */
       // 저장 버튼 클릭 이벤트 (안전 패턴)
@@ -154,6 +136,7 @@
         if (!selectedCoords) return;
       
         try {
+          /*
           const res = await fetch("https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -162,7 +145,24 @@
               longitude: selectedCoords.lng
             })
           });
-      
+          */
+          fetch("https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              latitude: selectedCoords.lat,
+              longitude: selectedCoords.lng
+            })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if(data.redirectUrl){
+              window.location.href = data.redirectUrl; // 노션 페이지로 이동
+            } else {
+              alert("좌표 전송 완료. 창을 닫아주세요.");
+            }
+          });
+
           if (!res.ok) throw new Error("Webhook 응답 실패: " + res.status);
       
           alert("좌표가 Webhook으로 전송되었습니다!");
