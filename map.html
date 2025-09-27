@@ -60,10 +60,10 @@
       return rows.slice(1); // 첫 줄은 헤더 제거
     }
 
+    let currentInfoWindow = null; // 현재 열린 infowindow 추적
     // 마커 표시
     async function drawMarkers() {
       const data = await loadCSV();
-      let currentInfoWindow = null; // 현재 열린 infowindow 추적
       data.forEach((row, i) => {
         const name = row[0] || `수목${i+1}`;
         const lat = parseFloat(row[1]); // CSV 첫 번째 컬럼 = 위도
