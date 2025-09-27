@@ -15,6 +15,7 @@
 // 🔹 URL 파라미터에서 fileId 추출
 const urlParams = new URLSearchParams(window.location.search);
 const fileId = urlParams.get("fileId");
+alert(fileId);  
 
 // 🔹 Google Drive CSV 파일 다운로드 URL
 const driveCsvUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
