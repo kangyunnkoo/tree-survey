@@ -2,59 +2,55 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>수목 위치도</title>
+  <title>Tree Map</title>
   <style>
     #map {width:100%; height:100vh;}
   </style>
-  <script type="text/javascript" 
-          src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_APP_KEY"></script>
 </head>
 <body>
 <div id="map"></div>
-
 <script>
-  // 1) URL에서 JSON 파일 경로 가져오기
-  const urlParams = new URLSearchParams(window.location.search);
-  const src = urlParams.get('src');
+// ✅ Master DB에 기록된 Google Drive 공유 CSV 링크
+const driveCsvUrl = "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID";
 
-  fetch(src)
-    .then(res => res.json())
-    .then(data => {
-      if (!data || data.length === 0) {
-        alert('표시할 데이터가 없습니다.');
-        return;
-      }
+// CSV 파싱 함수
+async function fetchCsv(url) {
+  const res = await fetch(url);
+  const text = await res.text();
+  return text.split("\n").slice(1).map(row => {
+    const [id, name, species, lat, lng, date] = row.split(",");
+    return { id, name, species, lat: parseFloat(lat), lng: parseFloat(lng), date };
+  });
+}
 
-      // 지도 초기화 (첫 번째 좌표 기준)
-      const map = new kakao.maps.Map(document.getElementById('map'), {
-        center: new kakao.maps.LatLng(data[0].lat, data[0].lng),
-        level: 4
-      });
+async function initMap() {
+  const trees = await fetchCsv(driveCsvUrl);
 
-      const bounds = new kakao.maps.LatLngBounds();
+  // 지도 초기화 (첫 번째 좌표 중심)
+  const mapContainer = document.getElementById("map");
+  const mapOption = { center: new kakao.maps.LatLng(trees[0].lat, trees[0].lng), level: 4 };
+  const map = new kakao.maps.Map(mapContainer, mapOption);
 
-      // 2) 모든 좌표에 마커 + 라벨 표시
-      data.forEach(item => {
-        const pos = new kakao.maps.LatLng(item.lat, item.lng);
+  // 마커 표시
+  trees.forEach(tree => {
+    if (!tree.lat || !tree.lng) return;
+    const marker = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(tree.lat, tree.lng),
+      map: map
+    });
 
-        // 마커
-        const marker = new kakao.maps.Marker({ position: pos });
-        marker.setMap(map);
+    const infowindow = new kakao.maps.InfoWindow({
+      content: `<div style="padding:5px;">${tree.name} (${tree.species})<br>${tree.date}</div>`
+    });
 
-        // 라벨(커스텀 오버레이)
-        const overlay = new kakao.maps.CustomOverlay({
-          position: pos,
-          content: `<div style="background:white;border:1px solid #333;padding:2px 4px;font-size:12px;">${item.label}</div>`,
-          yAnchor: 1.5
-        });
-        overlay.setMap(map);
+    kakao.maps.event.addListener(marker, "click", () => {
+      infowindow.open(map, marker);
+    });
+  });
+}
 
-        bounds.extend(pos);
-      });
-
-      map.setBounds(bounds); // 모든 마커가 보이도록 지도 범위 조정
-    })
-    .catch(err => console.error('JSON fetch error:', err));
+initMap();
 </script>
 </body>
 </html>
