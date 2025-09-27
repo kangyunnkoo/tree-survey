@@ -22,8 +22,8 @@ const driveCsvUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
 // 🔹 CSV 파싱 함수
 async function fetchCsv(url) {
   const res = await fetch(url);
+    alert(res);
   const text = await res.text();
-    alert(text);
   return text.split("\n").slice(1).map(row => {
     const [id, lat, lng] = row.split(",");
     return { id, lat: parseFloat(lat), lng: parseFloat(lng) };
