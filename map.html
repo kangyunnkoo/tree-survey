@@ -27,7 +27,7 @@
 
     // Canvas로 번호 마커 이미지 생성 함수
     function createNumberMarker(num) {
-      const size = 32;
+      const size = 20;
       const canvas = document.createElement("canvas");
       canvas.width = size;
       canvas.height = size;
@@ -41,7 +41,7 @@
 
       // 숫자
       ctx.fillStyle = "#fff";
-      ctx.font = "bold 12px Arial";
+      ctx.font = "bold 10px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(num, size/2, size/2);
