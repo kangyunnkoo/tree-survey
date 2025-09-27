@@ -24,8 +24,8 @@ async function fetchCsv(url) {
   const res = await fetch(url);
   const text = await res.text();
   return text.split("\n").slice(1).map(row => {
-    const [id, name, species, lat, lng, date] = row.split(",");
-    return { id, name, species, lat: parseFloat(lat), lng: parseFloat(lng), date };
+    const [id, lat, lng] = row.split(",");
+    return { id, lat: parseFloat(lat), lng: parseFloat(lng) };
   });
 }
 
@@ -52,13 +52,13 @@ async function initMap() {
       map: map
     });
 
-    const infowindow = new kakao.maps.InfoWindow({
-      content: `<div style="padding:5px;">${tree.name} (${tree.species})<br>${tree.date}</div>`
-    });
+    // const infowindow = new kakao.maps.InfoWindow({
+    //   content: `<div style="padding:5px;">${tree.name} (${tree.species})<br>${tree.date}</div>`
+    // });
 
-    kakao.maps.event.addListener(marker, "click", () => {
-      infowindow.open(map, marker);
-    });
+    // kakao.maps.event.addListener(marker, "click", () => {
+    //   infowindow.open(map, marker);
+    // });
   });
 }
 
