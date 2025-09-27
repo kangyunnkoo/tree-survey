@@ -21,6 +21,7 @@ const driveCsvUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
 
 // 🔹 CSV 파싱 함수
 async function fetchCsv(url) {
+  alert("1");
   const res = await fetch(url);
     alert(res);
   const text = await res.text();
@@ -32,7 +33,6 @@ async function fetchCsv(url) {
 
 // 🔹 지도 초기화 및 마커 표시
 async function initMap() {
-  alert("1");
   const trees = await fetchCsv(driveCsvUrl);
   if (!trees.length) {
     alert("CSV 데이터가 없습니다.");
