@@ -66,8 +66,8 @@
       let currentInfoWindow = null; // 현재 열린 infowindow 추적
       data.forEach((row, i) => {
         const no = row[0] || `수목${i+1}`;
-        const name = row[1] || ``;
-        const status = row[2] || ``;
+        const name = row[1] || '';
+        const status = row[2] || '';
         const lat = parseFloat(row[3]); // CSV 첫 번째 컬럼 = 위도
         const lng = parseFloat(row[4]); // CSV 두 번째 컬럼 = 경도
 
