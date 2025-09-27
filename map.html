@@ -92,13 +92,13 @@
         const lng = parseFloat(row[4]); // CSV 두 번째 컬럼 = 경도
 
         const marker = new kakao.maps.Marker({
-          position: new kakao.maps.LatLng(lat, lng),
-          image: createNumberMarker(no),
+          position: new kakao.maps.LatLng(row.lat, row.lng),
+          image: createNumberMarker(row.no),
           map: map
         });
 
         const infowindow = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px;">${name}-${status}</div>`
+          content: `<div style="padding:5px;">${row.name}-${row.status}</div>`
         });
 
         kakao.maps.event.addListener(marker, "click", () => {
