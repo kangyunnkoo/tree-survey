@@ -41,7 +41,7 @@
 
       // 숫자
       ctx.fillStyle = "#fff";
-      ctx.font = "bold 16px Arial";
+      ctx.font = "bold 12px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(num, size/2, size/2);
@@ -70,7 +70,7 @@
 
         const marker = new kakao.maps.Marker({
           position: new kakao.maps.LatLng(lat, lng),
-          image: createNumberMarker(i+1),
+          image: createNumberMarker(name),
           map: map
         });
 
