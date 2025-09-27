@@ -63,6 +63,7 @@
     // 마커 표시
     async function drawMarkers() {
       const data = await loadCSV();
+      let currentInfoWindow = null; // 현재 열린 infowindow 추적
       data.forEach((row, i) => {
         const name = row[0] || `수목${i+1}`;
         const lat = parseFloat(row[1]); // CSV 첫 번째 컬럼 = 위도
@@ -79,9 +80,20 @@
         });
 
         kakao.maps.event.addListener(marker, "click", () => {
-          infowindow.open(map, marker);
+            if (currentInfoWindow === infowindow) {
+              // 이미 열려있던 창 → 닫기
+              infowindow.close();
+              currentInfoWindow = null;
+            } else {
+              // 다른 창이 열려있으면 닫기
+              if (currentInfoWindow) {
+                currentInfoWindow.close();
+              }
+              // 새 창 열기
+              infowindow.open(map, marker);
+              currentInfoWindow = infowindow;
+            }
         });
-      });
     }
 
     drawMarkers();
