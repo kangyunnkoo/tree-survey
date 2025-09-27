@@ -65,18 +65,20 @@
       const data = await loadCSV();
       let currentInfoWindow = null; // 현재 열린 infowindow 추적
       data.forEach((row, i) => {
-        const name = row[0] || `수목${i+1}`;
-        const lat = parseFloat(row[1]); // CSV 첫 번째 컬럼 = 위도
-        const lng = parseFloat(row[2]); // CSV 두 번째 컬럼 = 경도
+        const no = row[0] || `수목${i+1}`;
+        const name = row[1] || ``;
+        const status = row[2] || ``;
+        const lat = parseFloat(row[3]); // CSV 첫 번째 컬럼 = 위도
+        const lng = parseFloat(row[4]); // CSV 두 번째 컬럼 = 경도
 
         const marker = new kakao.maps.Marker({
           position: new kakao.maps.LatLng(lat, lng),
-          image: createNumberMarker(name),
+          image: createNumberMarker(no),
           map: map
         });
 
         const infowindow = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px;">${name}</div>`
+          content: `<div style="padding:5px;">${name}-${status}</div>`
         });
 
         kakao.maps.event.addListener(marker, "click", () => {
