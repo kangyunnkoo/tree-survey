@@ -64,9 +64,9 @@
     async function drawMarkers() {
       const data = await loadCSV();
       data.forEach((row, i) => {
-        const lat = parseFloat(row[0]); // CSV 첫 번째 컬럼 = 위도
-        const lng = parseFloat(row[1]); // CSV 두 번째 컬럼 = 경도
-        const name = row[2] || `수목${i+1}`;
+        const name = row[0] || `수목${i+1}`;
+        const lat = parseFloat(row[1]); // CSV 첫 번째 컬럼 = 위도
+        const lng = parseFloat(row[2]); // CSV 두 번째 컬럼 = 경도
 
         const marker = new kakao.maps.Marker({
           position: new kakao.maps.LatLng(lat, lng),
