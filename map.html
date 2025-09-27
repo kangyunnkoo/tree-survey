@@ -1,51 +1,74 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <title>수목 위치도</title>
-  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
   <style>
-    #map { width:100%; height:100vh; }
-    .label {
-      background: white;
-      border: 1px solid #333;
-      padding: 2px 4px;
-      font-size: 12px;
-    }
+    #map {width: 100%; height: 100vh;}
   </style>
 </head>
 <body>
   <div id="map"></div>
+
+  <!-- 카카오 지도 SDK -->
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=여기에_본인_APPKEY_입력"></script>
   <script>
-    var map = new kakao.maps.Map(
-      document.getElementById('map'),
-      { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 4 }
-    );
-
     async function loadCSV() {
-      const res = await fetch("trees.csv"); // 같은 repo의 최신 CSV
-      const text = await res.text();
-      const rows = text.trim().split("\n").map(r => r.split(","));
-      const headers = rows.shift();
+      try {
+        // 같은 repo에 있는 trees.csv 불러오기
+        const res = await fetch("trees.csv");
+        if (!res.ok) throw new Error("CSV 불러오기 실패: " + res.status);
+        const text = await res.text();
 
-      rows.forEach(r => {
-        const obj = {};
-        headers.forEach((h,i) => obj[h] = r[i]);
+        // CSV 파싱
+        const rows = text.trim().split("\n").map(r => r.split(","));
+        const headers = rows.shift(); // 첫 행 제거 (id,name,lat,lng)
 
-        const pos = new kakao.maps.LatLng(obj["위도"], obj["경도"]);
-        const marker = new kakao.maps.Marker({ position: pos });
-        marker.setMap(map);
-
-        const overlay = new kakao.maps.CustomOverlay({
-          position: pos,
-          content: '<div class="label">'+obj["번호"]+'</div>',
-          yAnchor: 1.5
+        return rows.map(r => {
+          const obj = {};
+          headers.forEach((h, i) => obj[h.trim()] = r[i].trim());
+          return obj;
         });
-        overlay.setMap(map);
+      } catch (err) {
+        console.error("CSV 로드 오류:", err);
+        return [];
+      }
+    }
+
+    async function initMap() {
+      const trees = await loadCSV();
+
+      // 지도 초기화
+      const container = document.getElementById("map");
+      const options = {
+        center: new kakao.maps.LatLng(37.5665, 126.9780), // 기본: 서울시청
+        level: 5
+      };
+      const map = new kakao.maps.Map(container, options);
+
+      // 마커 표시
+      trees.forEach(tree => {
+        const lat = parseFloat(tree.lat);
+        const lng = parseFloat(tree.lng);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+          const marker = new kakao.maps.Marker({
+            position: new kakao.maps.LatLng(lat, lng),
+            map: map
+          });
+
+          const infowindow = new kakao.maps.InfoWindow({
+            content: `<div style="padding:5px;font-size:12px">${tree.no || "이름 없음"}</div>`
+          });
+
+          kakao.maps.event.addListener(marker, "click", () => {
+            infowindow.open(map, marker);
+          });
+        }
       });
     }
 
-    loadCSV();
+    initMap();
   </script>
 </body>
 </html>
