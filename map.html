@@ -1,83 +1,90 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <title>수목 위치도</title>
   <style>
-    #map {width: 100%; height: 100vh;}
+    #map { width: 100%; height: 100vh; }
   </style>
-  <!-- 카카오 지도 SDK -->
-  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_APP_KEY"></script>
 </head>
 <body>
   <div id="map"></div>
-
   <script>
-    async function loadCSV() {
-      try {
-        // 같은 repo에 있는 trees.csv 불러오기
-        const res = await fetch("trees.csv");
-        if (!res.ok) throw new Error("CSV 불러오기 실패: " + res.status);
-        const text = await res.text();
+    // URL 파라미터 파싱
+    const params = new URLSearchParams(window.location.search);
+    const csvUrl = params.get("csv");  // 예: trees.csv
+    const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본: 서울시청
+    const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
 
-        // CSV 파싱
-        const rows = text.trim().split("\n").map(r => r.split(","));
-        const headers = rows.shift(); // 첫 행 제거 (id,name,lat,lng)
+    // 지도 생성 (중심좌표를 파라미터로 반영)
+    const mapContainer = document.getElementById("map");
+    const mapOption = {
+      center: new kakao.maps.LatLng(centerLat, centerLng),
+      level: 5
+    };
+    const map = new kakao.maps.Map(mapContainer, mapOption);
 
-        return rows.map(r => {
-          const obj = {};
-          headers.forEach((h, i) => obj[h.trim()] = r[i].trim());
-          return obj;
-        });
-      } catch (err) {
-        console.error("CSV 로드 오류:", err);
-        return [];
-      }
+    // Canvas로 번호 마커 이미지 생성 함수
+    function createNumberMarker(num) {
+      const size = 32;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      // 원형 배경
+      ctx.fillStyle = "#1976d2";
+      ctx.beginPath();
+      ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 숫자
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 16px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(num, size/2, size/2);
+
+      return new kakao.maps.MarkerImage(
+        canvas.toDataURL(),
+        new kakao.maps.Size(size, size)
+      );
     }
 
-    async function initMap() {
-      const trees = await loadCSV();
+    // CSV 파일 로드
+    async function loadCSV() {
+      const res = await fetch(csvUrl);
+      const text = await res.text();
+      const rows = text.trim().split("\n").map(r => r.split(","));
+      return rows.slice(1); // 첫 줄은 헤더 제거
+    }
 
-      // 지도 초기화
-      const container = document.getElementById("map");
-      const options = {
-        center: new kakao.maps.LatLng(37.5665, 126.9780), // 기본: 서울시청
-        level: 5
-      };
-      const map = new kakao.maps.Map(container, options);
+    // 마커 표시
+    async function drawMarkers() {
+      const data = await loadCSV();
+      data.forEach((row, i) => {
+        const lat = parseFloat(row[0]); // CSV 첫 번째 컬럼 = 위도
+        const lng = parseFloat(row[1]); // CSV 두 번째 컬럼 = 경도
+        const name = row[2] || `수목${i+1}`;
 
-      // 마커 표시
-      trees.forEach(tree => {
-        const lat = parseFloat(tree.lat);
-        const lng = parseFloat(tree.lng);
+        const marker = new kakao.maps.Marker({
+          position: new kakao.maps.LatLng(lat, lng),
+          image: createNumberMarker(i+1),
+          map: map
+        });
 
-        if (!isNaN(lat) && !isNaN(lng)) {
-          const marker = new kakao.maps.Marker({
-            position: new kakao.maps.LatLng(lat, lng),
-            map: map
-          });
+        const infowindow = new kakao.maps.InfoWindow({
+          content: `<div style="padding:5px;">${name}</div>`
+        });
 
-          const label = new kakao.maps.CustomOverlay({
-            position: new kakao.maps.LatLng(lat, lng),
-            content: `<div style="background:#1976d2;color:#fff;
-                        border-radius:50%;width:24px;height:24px;
-                        display:flex;align-items:center;justify-content:center;
-                        font-size:12px;">${index+1}</div>`,
-            yAnchor: 1
-          });
-          label.setMap(map);
-          // const infowindow = new kakao.maps.InfoWindow({
-          //   content: `<div style="padding:5px;font-size:12px">${tree.no || "이름 없음"}</div>`
-          // });
-
-          // kakao.maps.event.addListener(marker, "click", () => {
-          //   infowindow.open(map, marker);
-          // });
-        }
+        kakao.maps.event.addListener(marker, "click", () => {
+          infowindow.open(map, marker);
+        });
       });
     }
 
-    initMap();
+    drawMarkers();
   </script>
 </body>
 </html>
