@@ -2,19 +2,24 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Tree Map</title>
+  <title>수목 위치도</title>
   <style>
     #map {width:100%; height:100vh;}
   </style>
-  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+  <!-- 카카오맵 JS SDK -->
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_APP_KEY"></script>
 </head>
 <body>
 <div id="map"></div>
 <script>
-// ✅ Master DB에 기록된 Google Drive 공유 CSV 링크
-const driveCsvUrl = "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID";
+// 🔹 URL 파라미터에서 fileId 추출
+const urlParams = new URLSearchParams(window.location.search);
+const fileId = urlParams.get("fileId");
 
-// CSV 파싱 함수
+// 🔹 Google Drive CSV 파일 다운로드 URL
+const driveCsvUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
+// 🔹 CSV 파싱 함수
 async function fetchCsv(url) {
   const res = await fetch(url);
   const text = await res.text();
@@ -24,17 +29,24 @@ async function fetchCsv(url) {
   });
 }
 
+// 🔹 지도 초기화 및 마커 표시
 async function initMap() {
   const trees = await fetchCsv(driveCsvUrl);
+  if (!trees.length) {
+    alert("CSV 데이터가 없습니다.");
+    return;
+  }
 
-  // 지도 초기화 (첫 번째 좌표 중심)
   const mapContainer = document.getElementById("map");
-  const mapOption = { center: new kakao.maps.LatLng(trees[0].lat, trees[0].lng), level: 4 };
+  const mapOption = {
+    center: new kakao.maps.LatLng(trees[0].lat, trees[0].lng),
+    level: 4
+  };
   const map = new kakao.maps.Map(mapContainer, mapOption);
 
-  // 마커 표시
   trees.forEach(tree => {
     if (!tree.lat || !tree.lng) return;
+
     const marker = new kakao.maps.Marker({
       position: new kakao.maps.LatLng(tree.lat, tree.lng),
       map: map
