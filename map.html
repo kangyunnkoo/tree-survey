@@ -61,7 +61,7 @@
     }
     
     async function loadCSV() {
-      const res = await fetch("exports/"+csvUrl);
+      const res = await fetch(csvUrl);
       const text = await res.text();
       const rows = parseCSV(text);
     
