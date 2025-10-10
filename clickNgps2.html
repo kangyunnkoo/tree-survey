@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>수목 위치 선택</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; }
+    #map { width:100%; height:85%; }
+    #panel {
+      height:15%;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:10px;
+      background:#f4f4f4;
+      border-top:1px solid #ccc;
+      font-size:14px;
+    }
+    #coords { flex:1; }
+    #saveBtn {
+      padding:8px 14px;
+      font-size:14px;
+      background:#007bff;
+      color:white;
+      border:none;
+      border-radius:4px;
+      cursor:pointer;
+    }
+    #saveBtn:disabled {
+      background:#aaa;
+      cursor:not-allowed;
+    }
+  </style>
+  <!-- 카카오맵 JS SDK -->
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <div id="coords">지도에서 수목 위치를 클릭하세요.</div>
+    <button id="saveBtn" disabled>저장</button>
+  </div>
+
+  <script>
+    window.onload = function() {
+      const mapContainer = document.getElementById('map');
+      const mapOptions = { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 1 };
+      const map = new kakao.maps.Map(mapContainer, mapOptions);
+
+      let centerMarker = null; // 현재 위치 마커
+      let userMarker = null;   // 사용자가 클릭한 마커
+      let selectedCoords = null;
+
+      const coordsBox = document.getElementById("coords");
+      const saveBtn = document.getElementById("saveBtn");
+
+      // 중심 마커 이미지 (빨간색)
+      const centerImage = new kakao.maps.MarkerImage(
+        "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png",
+        new kakao.maps.Size(24, 35)
+      );
+
+      // GPS로 현재 위치 가져오기
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const locPosition = new kakao.maps.LatLng(lat, lng);
+          map.setCenter(locPosition);
+
+          // 중심 마커 표시
+          centerMarker = new kakao.maps.Marker({
+            position: locPosition,
+            map: map,
+            image: centerImage
+          });
+        }, function(error) {
+          console.warn("현재 위치를 가져올 수 없습니다.", error);
+          const fallback = new kakao.maps.LatLng(37.5665, 126.9780);
+          map.setCenter(fallback);
+          centerMarker = new kakao.maps.Marker({
+            position: fallback,
+            map: map,
+            image: centerImage
+          });
+        });
+      } else {
+        const fallback = new kakao.maps.LatLng(37.5665, 126.9780);
+        map.setCenter(fallback);
+        centerMarker = new kakao.maps.Marker({
+          position: fallback,
+          map: map,
+          image: centerImage
+        });
+      }
+
+      // 지도 클릭 이벤트 (사용자 마커)
+      kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
+        const latlng = mouseEvent.latLng;
+
+        // 이전 사용자 마커 제거
+        if (userMarker) userMarker.setMap(null);
+
+        // 기본 마커 사용
+        userMarker = new kakao.maps.Marker({
+          position: latlng,
+          map: map
+        });
+
+        selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
+        coordsBox.textContent = `선택된 좌표 → 위도: ${selectedCoords.lat.toFixed(6)}, 경도: ${selectedCoords.lng.toFixed(6)}`;
+        saveBtn.disabled = false;
+      });
+
+      // 저장 버튼 클릭 이벤트 (안전 패턴)
+      saveBtn.addEventListener("click", async function() {
+        if (!selectedCoords) return;
+      
+        try {
+
+          const res = await fetch("https://hook.eu2.make.com/t7l0plp58twavf61p8ysg1g991ve98d6", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              latitude: selectedCoords.lat,
+              longitude: selectedCoords.lng
+            })
+          });
+
+          if (!res.ok) throw new Error("Webhook 응답 실패: " + res.status);
+      
+          alert("좌표가 Webhook으로 전송되었습니다!");
+      
+          // 1) 안전하게 닫기 시도: 먼저 간단한 검사
+          // window.opener 가 있거나 (내가 연 창) 모바일 WebView(예: 노션)는 닫을 수 있는 경우가 많음
+          const canClose = !!window.opener || /notion/i.test(navigator.userAgent) || /wv|webview|android.*version/i.test(navigator.userAgent);
+      
+          if (canClose) {
+            // 지연을 줘서(맵/알림 렌더링 완료) 닫기 시도
+            setTimeout(() => {
+              try {
+                window.close();
+              } catch (e) {
+                console.warn("window.close() 실패:", e);
+              }
+            }, 200); // 0.2초 지연 (필요시 300~500ms로 늘려도 됨)
+            return;
+          }
+      
+          // 2) 닫기 불가 환경(대부분 PC 브라우저)일 경우: 안내 또는 리다이렉트
+          // (노션으로 돌아가고 싶다면 노션 페이지 URL로 이동시키는 방법도 있음)
+          document.getElementById("coords").textContent = "좌표 전송 완료. 이 창을 닫아주세요.";
+          // 또는 자동 리다이렉트 (원치 않으면 주석 처리)
+          // window.location.href = "https://www.notion.so/"; 
+          
+        } catch (err) {
+          console.error("저장 실패:", err);
+          alert("좌표 전송 중 오류가 발생했습니다.");
+        }
+      });
+
+    }
+  </script>
+</body>
+</html>
