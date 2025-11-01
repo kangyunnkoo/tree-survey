@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>수목 위치도</title>
+  <title>수목위치도(One)</title>
   <style>
     #map { width: 100%; height: 100vh; }
   </style>
@@ -13,14 +13,14 @@
   <script>
     // URL 파라미터 파싱
     const params = new URLSearchParams(window.location.search);
-    const csvUrl = params.get("csv");  // 예: trees.csv
-    const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본: 서울시청
-    const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
-
+    const lat = parseFloat(params.get("lat")) || 37.5665; // 기본: 서울시청
+    const lng = parseFloat(params.get("lng")) || 126.9780;
+    const treeNo = parseFloat(params.get("treeNo")) || 1;
+    
     // 지도 생성 (중심좌표를 파라미터로 반영)
     const mapContainer = document.getElementById("map");
     const mapOption = {
-      center: new kakao.maps.LatLng(centerLat, centerLng),
+      center: new kakao.maps.LatLng(lat, lng),
       level: 5
     };
     const map = new kakao.maps.Map(mapContainer, mapOption);
@@ -52,72 +52,11 @@
       );
     }
 
-    function parseCSV(text) {
-      const rows = text.trim().split("\n").map(line => {
-        const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-        return matches ? matches.map(s => s.replace(/^"|"$/g, "")) : [];
-      });
-      return rows;
-    }
-    
-    async function loadCSV() {
-      const res = await fetch(csvUrl);
-      const text = await res.text();
-      const rows = parseCSV(text);
-    
-      const header = rows[0];
-      const data = rows.slice(1).map(r => {
-        return {
-          no: r[0],
-          name: r[1],
-          status: r[2],
-          lat: parseFloat(r[3]),
-          lng: parseFloat(r[4])
-        };
-      });
-      return data;
-    }
-    
-    // 마커 표시
-    async function drawMarkers() {
-      const data = await loadCSV();
-      let currentInfoWindow = null; // 현재 열린 infowindow 추적
-      data.forEach((row, i) => {
-        const no = row[0] || `수목${i+1}`;
-        const name = row[1] || '';
-        const status = row[2] || '';
-        const lat = parseFloat(row[3]); // CSV 첫 번째 컬럼 = 위도
-        const lng = parseFloat(row[4]); // CSV 두 번째 컬럼 = 경도
-
-        const marker = new kakao.maps.Marker({
-          position: new kakao.maps.LatLng(row.lat, row.lng),
-          image: createNumberMarker(row.no),
-          map: map
-        });
-
-        const infowindow = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px;">${row.name}-${row.status}</div>`
-        });
-
-        kakao.maps.event.addListener(marker, "click", () => {
-            if (currentInfoWindow === infowindow) {
-              // 이미 열려있던 창 → 닫기
-              infowindow.close();
-              currentInfoWindow = null;
-            } else {
-              // 다른 창이 열려있으면 닫기
-              if (currentInfoWindow) {
-                currentInfoWindow.close();
-              }
-              // 새 창 열기
-              infowindow.open(map, marker);
-              currentInfoWindow = infowindow;
-            }
-        });
-      });
-    }
-
-    drawMarkers();
+    const marker = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(lat, lng),
+      image: createNumberMarker(treeNo),
+      map: map
+    });
   </script>
 </body>
 </html>
