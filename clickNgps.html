@@ -44,10 +44,10 @@
   <script>
     window.onload = function() {
       const params = new URLSearchParams(window.location.search);
-      const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본: 서울시청
-      const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
+      const centerLat = parseFloat(params.get("centerLat")); // 기본: 서울시청
+      const centerLng = parseFloat(params.get("centerLng"));
       const mapContainer = document.getElementById('map');
-      const mapOptions = { center: new kakao.maps.LatLng(centerLat, centerLng), level: 1 };
+      const mapOptions = { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 1 };
       const map = new kakao.maps.Map(mapContainer, mapOptions);
 
       let centerMarker = null; // 현재 위치 마커
@@ -66,8 +66,8 @@
       // GPS로 현재 위치 가져오기
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(position) {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
+          const lat = centerLat || position.coords.latitude;
+          const lng = centerLng || position.coords.longitude;
           const locPosition = new kakao.maps.LatLng(lat, lng);
           map.setCenter(locPosition);
 
