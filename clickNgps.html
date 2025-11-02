@@ -44,6 +44,8 @@
   <script>
     window.onload = function() {
       const mapContainer = document.getElementById('map');
+      const lat = parseFloat(params.get("lat")) || 37.5665; // 기본: 서울시청
+      const lng = parseFloat(params.get("lng")) || 126.9780;
       const mapOptions = { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 1 };
       const map = new kakao.maps.Map(mapContainer, mapOptions);
 
