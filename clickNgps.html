@@ -45,7 +45,7 @@
     window.onload = function() {
       const params = new URLSearchParams(window.location.search);
       const name = params.get("name");
-      const centerLat = parseFloat(params.get("centerLat")); // 기본: 서울시청
+      const centerLat = parseFloat(params.get("centerLat"));
       const centerLng = parseFloat(params.get("centerLng"));
       const mapContainer = document.getElementById('map');
       const mapOptions = { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 1 };
