@@ -44,7 +44,7 @@
   <script>
     window.onload = function() {
       const params = new URLSearchParams(window.location.search);
-      const name = parseFloat(params.get("name"));
+      const name = parseString(params.get("name"));
       const centerLat = parseFloat(params.get("centerLat")); // 기본: 서울시청
       const centerLng = parseFloat(params.get("centerLng"));
       const mapContainer = document.getElementById('map');
