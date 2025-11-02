@@ -54,6 +54,7 @@
       let centerMarker = null; // 현재 위치 마커
       let userMarker = null;   // 사용자가 클릭한 마커
       let selectedCoords = null;
+      let notionItem = name;
 
       const coordsBox = document.getElementById("coords");
       const saveBtn = document.getElementById("saveBtn");
@@ -126,7 +127,7 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              name: name,
+              name: notionItem,
               latitude: selectedCoords.lat,
               longitude: selectedCoords.lng
             })
