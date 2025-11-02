@@ -66,8 +66,8 @@
       // GPS로 현재 위치 가져오기
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(position) {
-          const lat = centerLat || position.coords.latitude;
-          const lng = centerLng || position.coords.longitude;
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
           const locPosition = new kakao.maps.LatLng(lat, lng);
           map.setCenter(locPosition);
 
