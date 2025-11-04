@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>아파트 수목조사용 지도 캡처</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f9f9f9;
+      margin: 0;
+      padding: 2rem;
+    }
+    #map {
+      width: 1000px;
+      height: 700px;
+      margin: 0 auto;
+      border: 2px solid #333;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    #captureBtn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #captureBtn:hover {
+      background-color: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <h2>📍 아파트 수목조사용 카카오맵</h2>
+  <div id="map"></div>
+  <button id="captureBtn">지도 이미지 캡처하기</button>
+
+  <!-- ✅ html2canvas 라이브러리 -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <!-- ✅ 카카오맵 JS SDK (자신의 앱키로 변경하세요) -->
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_APP_KEY"></script>
+
+  <script>
+    // 중심좌표 (예: 서울 강남구)
+    const centerLat = 37.498095;
+    const centerLng = 127.027610;
+
+    // 지도 표시 영역
+    const container = document.getElementById('map');
+    const options = {
+      center: new kakao.maps.LatLng(centerLat, centerLng),
+      level: 5 // level 5~6 추천
+    };
+
+    // ✅ StaticMap 객체 생성
+    const staticMap = new kakao.maps.StaticMap(container, {
+      center: new kakao.maps.LatLng(centerLat, centerLng),
+      level: 5,
+      marker: [
+        { position: new kakao.maps.LatLng(centerLat, centerLng) }
+      ]
+    });
+
+    // ✅ html2canvas로 캡처
+    document.getElementById('captureBtn').addEventListener('click', async () => {
+      const mapElement = document.getElementById('map');
+      const canvas = await html2canvas(mapElement, { useCORS: true });
+      const image = canvas.toDataURL('image/png');
+
+      // 자동 다운로드
+      const link = document.createElement('a');
+      link.download = `kakao_map_capture_${Date.now()}.png`;
+      link.href = image;
+      link.click();
+    });
+  </script>
+</body>
+</html>
