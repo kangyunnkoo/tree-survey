@@ -46,9 +46,10 @@
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_APP_KEY"></script>
 
   <script>
-    // 중심좌표 (예: 서울 강남구)
-    const centerLat = 37.498095;
-    const centerLng = 127.027610;
+    // URL 파라미터 파싱
+    const params = new URLSearchParams(window.location.search);
+    const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본: 서울시청
+    const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
 
     // 지도 표시 영역
     const container = document.getElementById('map');
