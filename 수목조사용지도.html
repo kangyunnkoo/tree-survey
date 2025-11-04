@@ -55,13 +55,13 @@
     const container = document.getElementById('map');
     const options = {
       center: new kakao.maps.LatLng(centerLat, centerLng),
-      level: 2 // level 5~6 추천
+      level: 1 // level 5~6 추천
     };
 
     // ✅ StaticMap 객체 생성
     const staticMap = new kakao.maps.StaticMap(container, {
       center: new kakao.maps.LatLng(centerLat, centerLng),
-      level: 2,
+      level: 1,
       marker: [
         { position: new kakao.maps.LatLng(centerLat, centerLng) }
       ]
