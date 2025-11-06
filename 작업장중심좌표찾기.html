@@ -68,7 +68,7 @@
 
     const params = new URLSearchParams(location.search);
     const address = params.get('address') ? decodeURIComponent(params.get('address')) : null;
-    const notionId = params.get('id') || null;
+    const notionName = params.get('name') || null;
     const webhookUrl = params.get('webhook') || null;
     const requestedLevel = parseInt(params.get('level')) || 3; // 권장 2~3
 
