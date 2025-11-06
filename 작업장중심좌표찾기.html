@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>작업장 중심좌표 찾기 — 카카오맵</title>
+
+<style>
+  body { font-family: 'Noto Sans KR', sans-serif; margin:0; padding:16px; background:#f3f6f9; color:#111 }
+  .container { max-width:1100px; margin:0 auto; }
+  header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  h1 { font-size:1.1rem; margin:0; }
+  #map { width:100%; height:72vh; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+  .controls { margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .info { background:#fff; padding:10px 12px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.04); display:flex; gap:10px; align-items:center;}
+  button { padding:8px 12px; border-radius:6px; border:0; cursor:pointer; background:#2563eb; color:#fff; }
+  button.secondary { background:#10b981; }
+  input.copybox { border:1px solid #ddd; padding:6px 8px; border-radius:6px; width:260px; }
+  small.note { color:#666; display:block; margin-top:6px; }
+  @media (max-width:720px) { #map { height:56vh; } .info { flex-direction:column; align-items:flex-start } }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📍 주소 기반 좌표 선택기</h1>
+      <div style="margin-left:auto"><small class="note">레벨 2~3 권장 (근접 확대)</small></div>
+    </header>
+
+    <!-- Map 렌더 타겟 -->
+    <div id="map"></div>
+
+    <!-- 하단 컨트롤: 선택 좌표, 복사, 저장(웹훅 POST) -->
+    <div class="controls">
+      <div class="info">
+        <div>
+          <div><strong>선택 좌표</strong></div>
+          <div id="coords" style="font-family:monospace">-</div>
+        </div>
+
+        <div>
+          <label for="copyInput"><small>복사(클릭으로 복사)</small></label><br>
+          <input id="copyInput" class="copybox" readonly />
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <button id="copyBtn" title="클립보드로 좌표 복사">복사</button>
+          <button id="sendBtn" class="secondary" title="웹훅이 설정되어 있으면 전송">저장(전송)</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">사용법: Notion의 '좌표선택' 링크를 클릭하면 이 페이지가 열립니다. 주소가 전달되지 않으면 기본 중앙(서울)이 로드됩니다. 선택 후 복사하거나 저장하세요.</p>
+  </div>
+
+  <!-- 카카오맵 JS SDK: 'libraries=services' 포함(좌표 변환/주소 검색 등) -->
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_JAVASCRIPT_KEY&libraries=services"></script>
+
+  <script>
+  (function(){
+    // ========== 설정 (변경 금지 필요 없음) ==========
+    // URL 파라미터로 다음을 받습니다:
+    //  - address=<주소 문자열>  (url-encoded)
+    //  - id=<Notion Page ID or item id>  (선택)
+    //  - webhook=<webhook URL>  (선택) -- POST 받는 서버(Make 등)
+    //  - level=<map level> (선택, 기본 3)
+    // ================================================
+
+    const params = new URLSearchParams(location.search);
+    const address = params.get('address') ? decodeURIComponent(params.get('address')) : null;
+    const notionId = params.get('id') || null;
+    const webhookUrl = params.get('webhook') || null;
+    const requestedLevel = parseInt(params.get('level')) || 3; // 권장 2~3
+
+    // DOM
+    const mapDiv = document.getElementById('map');
+    const coordsEl = document.getElementById('coords');
+    const copyInput = document.getElementById('copyInput');
+    const copyBtn = document.getElementById('copyBtn');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // 기본 중심(서울 중간) — address 없을 때 사용
+    const DEFAULT_CENTER = new kakao.maps.LatLng(37.566536, 126.977966);
+
+    // 지도 옵션
+    const mapOptions = { center: DEFAULT_CENTER, level: Math.max(1, Math.min(8, requestedLevel)), draggable: true };
+    const map = new kakao.maps.Map(mapDiv, mapOptions);
+
+    // 마커(선택용)
+    const marker = new kakao.maps.Marker({ clickable: true });
+    marker.setMap(map);
+
+    // 지오코더(주소->좌표)
+    const geocoder = new kakao.maps.services.Geocoder();
+
+    // 좌표 업데이트 helper
+    function setCoords(lat, lng) {
+      const latf = Number(lat).toFixed(7);
+      const lngf = Number(lng).toFixed(7);
+      coordsEl.textContent = `${latf}, ${lngf}`;
+      copyInput.value = `${latf},${lngf}`;
+      marker.setPosition(new kakao.maps.LatLng(lat, lng));
+      // center the map on selection (keep requested level)
+      map.setCenter(new kakao.maps.LatLng(lat, lng));
+      map.setLevel(Math.max(1, Math.min(8, requestedLevel)));
+    }
+
+    // 1) 전달된 주소가 있으면 geocode -> center, marker
+    if (address) {
+      // 주소 디스플레이는 브라우저 콘솔에 남김 (UI에 안 보냄)
+      console.log('주소 파라미터:', address);
+
+      geocoder.addressSearch(address, function(result, status) {
+        if (status === kakao.maps.services.Status.OK && result && result[0]) {
+          const y = parseFloat(result[0].y);
+          const x = parseFloat(result[0].x);
+          setCoords(y, x);
+        } else {
+          console.warn('주소 변환 실패:', status);
+          // 실패 시 기본 중심 유지
+          map.setCenter(DEFAULT_CENTER);
+        }
+      });
+    } else {
+      // 주소가 없으면 기본 중심으로 세팅
+      map.setCenter(DEFAULT_CENTER);
+    }
+
+    // 2) 지도 클릭 시 좌표 선택
+    kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
+      const latlng = mouseEvent.latLng;
+      const lat = latlng.getLat();
+      const lng = latlng.getLng();
+      setCoords(lat, lng);
+    });
+
+    // 3) 복사 버튼: 클립보드에 'lat,lng' 복사
+    copyBtn.addEventListener('click', async () => {
+      const txt = copyInput.value;
+      if (!txt) { alert('먼저 좌표를 선택하세요.'); return; }
+      try {
+        await navigator.clipboard.writeText(txt);
+        copyBtn.textContent = '복사됨 ✓';
+        setTimeout(()=>copyBtn.textContent='복사', 1200);
+      } catch (e) {
+        // fallback
+        copyInput.select();
+        document.execCommand('copy');
+        copyBtn.textContent = '복사됨 ✓';
+        setTimeout(()=>copyBtn.textContent='복사', 1200);
+      }
+    });
+
+    // 4) 저장(전송) 버튼: 웹훅이 설정되어 있으면 JSON POST
+    sendBtn.addEventListener('click', async () => {
+      const val = copyInput.value;
+      if (!val) { alert('좌표를 먼저 선택해 주세요.'); return; }
+      const [lat, lng] = val.split(',');
+
+      // 만약 webhook 파라미터가 주어지면 POST
+      if (webhookUrl) {
+        try {
+          const payload = {
+            id: notionId || null,
+            lat: lat.trim(),
+            lng: lng.trim(),
+            source: location.href,
+            ts: new Date().toISOString()
+          };
+          const res = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            alert('좌표가 전송되었습니다.');
+          } else {
+            const txt = await res.text().catch(()=>res.statusText);
+            alert('전송 실패: ' + (txt || res.status));
+          }
+        } catch (err) {
+          console.error(err);
+          alert('전송 중 오류가 발생했습니다. (콘솔 확인)');
+        }
+      } else {
+        // webhook이 없으면 클립보드로 복사되었음을 알림
+        try { await navigator.clipboard.writeText(val); } catch (e){ /* ignore */ }
+        alert('웹훅이 설정되지 않았습니다. 좌표가 클립보드에 복사되었습니다.');
+      }
+    });
+
+    // 5) Optional: opener가 있을 경우(팝업으로 열었다면) 선택된 좌표를 opener로 postMessage로 보낼 수 있게 함
+    //    opener가 존재하고 메시지 수신 구현이 되어 있으면 자동 전달하도록 할 수 있음.
+    window.addEventListener('beforeunload', function(){
+      if (window.opener && copyInput.value) {
+        try {
+          window.opener.postMessage({ type:'coordsSelected', coords: copyInput.value, id: notionId || null }, '*');
+        } catch(e){}
+      }
+    });
+
+    // UX: 지도의 zoom이나 center 강제: 권장 레벨 2~3으로 고정하려면 아래 주석 해제
+    // map.setLevel(3); // 강제 고정(원하면 사용)
+  })();
+  </script>
+</body>
+</html>
