@@ -104,7 +104,7 @@
         });
 
         const infowindow = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px;padding-right:0px;">${row.name}-${row.status}</div>`
+          content: `<div style="padding:5px;padding-right:20px;">${row.name}-${row.status}</div>`
         });
 
         kakao.maps.event.addListener(marker, "click", () => {
