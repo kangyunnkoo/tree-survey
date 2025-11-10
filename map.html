@@ -46,10 +46,17 @@
       ctx.textBaseline = "middle";
       ctx.fillText(num, size/2, size/2);
 
-      return new kakao.maps.MarkerImage(
-        canvas.toDataURL(),
-        new kakao.maps.Size(size, size)
-      );
+      //return new kakao.maps.MarkerImage(
+      //  canvas.toDataURL(),
+      //  new kakao.maps.Size(size, size)
+      //);
+      // 중심 기준 offset 설정
+      const imageSize = new kakao.maps.Size(size, size);
+      const imageOption = {
+        offset: new kakao.maps.Point(size / 2, size / 2) // 중심을 기준점으로
+      };
+    
+      return new kakao.maps.MarkerImage(canvas.toDataURL(), imageSize, imageOption);
     }
 
     function parseCSV(text) {
