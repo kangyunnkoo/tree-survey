@@ -61,7 +61,8 @@
 
     function parseCSV(text) {
       const rows = text.trim().split("\n").map(line => {
-        const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+        //const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+        const matches = line.match(/("([^"]|"")*"|[^,]+)(?=,|$)/g);
         return matches ? matches.map(s => s.replace(/^"|"$/g, "")) : [];
       });
       return rows;
