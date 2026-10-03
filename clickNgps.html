@@ -112,7 +112,7 @@
         });
 
         selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
-        coordsBox.textContent = `선택된 좌표 → 위도/경도 : ${selectedCoords.lat.toFixed(6)}, ${selectedCoords.lng.toFixed(6)}`;
+        coordsBox.textContent = `선택된 좌표 → 위도/경도 : ${selectedCoords.lat.toFixed(6)} ${selectedCoords.lng.toFixed(6)}`;
         saveBtn.disabled = false;
       });
 
