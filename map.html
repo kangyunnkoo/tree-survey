@@ -59,7 +59,8 @@
       const ctx = canvas.getContext("2d");
 
       // 원형 배경
-      ctx.fillStyle = "#1976d2";
+      //ctx.fillStyle = "#1976d2";
+      ctx.fillStyle = "#0d47a1";
       ctx.beginPath();
       ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
       ctx.fill();
@@ -67,7 +68,8 @@
       // 숫자
       ctx.fillStyle = "#fff";
       //ctx.font = "bold 10px Arial";
-      ctx.font = "bold 8px Arial";
+      //ctx.font = "bold 8px Arial";
+      ctx.font = "bold 6.5px Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(num, size/2, size/2);
