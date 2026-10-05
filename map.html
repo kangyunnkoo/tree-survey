@@ -21,10 +21,7 @@
       overflow: hidden;
     }
 
-    /* 
-      100% 크기에서 transform: scale(2) 및 회전 적용
-      transform-origin: center center로 정중앙 기준 변형
-    */
+    /* 100% 크기에서 transform: scale(2) 및 회전 적용 */
     #map {
       width: 100%;
       height: 100%;
@@ -82,6 +79,9 @@
     };
     const map = new kakao.maps.Map(mapContainer, mapOption);
 
+    // 생성된 마커 및 번호 데이터 추적 배열
+    const markerList = [];
+
     // 1. InfoWindow 추적 관리
     let currentInfoWindow = null;
 
@@ -97,12 +97,10 @@
     // -------------------------------------------------------------
     let zoomStartCenter = null;
 
-    // 줌 시작 전 현재 보고 있는 화면 정중앙 좌표 채록
     kakao.maps.event.addListener(map, 'zoom_start', function() {
       zoomStartCenter = map.getCenter();
     });
 
-    // 줌 완료 후 채록해둔 중앙 좌표로 즉시 재고정
     kakao.maps.event.addListener(map, 'zoom_changed', function() {
       if (zoomStartCenter) {
         map.setCenter(zoomStartCenter);
@@ -110,7 +108,7 @@
     });
 
     // -------------------------------------------------------------
-    // 3. 정확한 중심 기준 회전 및 드래그 제어
+    // 3. 정확한 중심 기준 회전 & 마커 역회전 재렌더링 제어
     // -------------------------------------------------------------
     let currentAngle = 0;
     let isDragging = false;
@@ -123,7 +121,7 @@
       currentAngle = (currentAngle + 90) % 360;
       const mapEl = document.getElementById("map");
       
-      // CSS 변수로 회전만 변경
+      // CSS 변수로 회전 적용
       mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
       document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (현재 ${currentAngle}°)`;
 
@@ -133,11 +131,22 @@
         map.setDraggable(true);
       }
 
+      // [핵심] 지도 회전각의 반대 방향으로 모든 마커 이미지 일괄 갱신
+      updateMarkersRotation(currentAngle);
+
       // 회전 애니메이션 완료 후 정확히 기존 화면 중앙 위치로 복원
       setTimeout(() => {
         map.relayout();
         map.setCenter(visualCenter);
       }, 300);
+    }
+
+    // 모든 마커를 지도 회전각의 역방향으로 다시 그려서 교체하는 함수
+    function updateMarkersRotation(mapAngle) {
+      markerList.forEach(item => {
+        const newImage = createNumberMarker(item.no, mapAngle);
+        item.marker.setImage(newImage);
+      });
     }
 
     // 커스텀 드래그 이벤트 (회전 상태에서 drag 시)
@@ -162,7 +171,6 @@
       startY = e.clientY;
 
       const rad = (currentAngle * Math.PI) / 180;
-      // scale(2) 적용 상태에 맞춰 이동량 정밀 보정
       const correctedDx = (dx * Math.cos(rad) + dy * Math.sin(rad)) / 2;
       const correctedDy = (-dx * Math.sin(rad) + dy * Math.cos(rad)) / 2;
 
@@ -174,11 +182,11 @@
     });
 
     // -------------------------------------------------------------
-    // 4. 고해상도 마커 생성 및 데이터 로드
+    // 4. 역회전 보정이 포함된 고해상도 마커 생성 함수
     // -------------------------------------------------------------
-    function createNumberMarker(num) {
+    function createNumberMarker(num, mapAngle = 0) {
       const displaySize = 10;
-      const scale = 2; // 선명도 보정
+      const scale = 2; // 레티나 보정
 
       const canvas = document.createElement("canvas");
       canvas.width = displaySize * scale;
@@ -187,22 +195,30 @@
       const ctx = canvas.getContext("2d");
       ctx.scale(scale, scale);
 
+      // [핵심] 캔버스 중심을 기준으로 지도 회전각의 역방향(-mapAngle) 회전 적용
+      ctx.translate(displaySize / 2, displaySize / 2);
+      const rad = (-mapAngle * Math.PI) / 180;
+      ctx.rotate(rad);
+
+      // 원형 배경 (어두운 딥 블루) - 캔버스 중심점이 (0,0)으로 이동했으므로 위치 보정
       ctx.fillStyle = "#0d47a1";
       ctx.beginPath();
-      ctx.arc(displaySize / 2, displaySize / 2, displaySize / 2, 0, Math.PI * 2);
+      ctx.arc(0, 0, displaySize / 2, 0, Math.PI * 2);
       ctx.fill();
 
+      // 얇은 흰색 테두리
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 0.5;
       ctx.stroke();
 
+      // 고해상도 선명 폰트 출력
       ctx.fillStyle = "#ffffff";
       const fontSize = String(num).length >= 2 ? "5.5px" : "6.5px";
       ctx.font = `bold ${fontSize} 'Malgun Gothic', Arial, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-      ctx.fillText(num, displaySize / 2, displaySize / 2 + 0.3);
+      ctx.fillText(num, 0, 0.3);
 
       const imageSize = new kakao.maps.Size(displaySize, displaySize);
       const imageOption = {
@@ -238,10 +254,17 @@
       const data = await loadCSV();
 
       data.forEach((row) => {
+        const markerImage = createNumberMarker(row.no, currentAngle);
         const marker = new kakao.maps.Marker({
           position: new kakao.maps.LatLng(row.lat, row.lng),
-          image: createNumberMarker(row.no),
+          image: markerImage,
           map: map
+        });
+
+        // 생성된 마커와 번호 추적 배열에 등록
+        markerList.push({
+          no: row.no,
+          marker: marker
         });
 
         const infowindow = new kakao.maps.InfoWindow({
