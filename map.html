@@ -45,7 +45,7 @@
     const mapContainer = document.getElementById("map");
     const mapOption = {
       center: new kakao.maps.LatLng(centerLat, centerLng),
-      level: 5
+      level: 1
     };
     const map = new kakao.maps.Map(mapContainer, mapOption);
 
@@ -67,7 +67,7 @@
       // 숫자
       ctx.fillStyle = "#fff";
       //ctx.font = "bold 10px Arial";
-      ctx.font = "bold 7px Arial";
+      ctx.font = "bold 8px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(num, size/2, size/2);
