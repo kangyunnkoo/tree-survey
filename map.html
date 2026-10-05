@@ -126,7 +126,7 @@
       mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
       document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (현재 ${currentAngle}°)`;
 
-      // 0도가 아닐 때는 카카오맵 기본 드래그 비활성화 (커스텀 드래그가 처리)
+      // 회전 상태일 때는 오동작 방지를 위해 기본 드래그 비활성화, 0도 복귀 시 드래그 재활성화
       if (currentAngle !== 0) {
         map.setDraggable(false);
       } else {
@@ -152,70 +152,7 @@
     }
 
     // -------------------------------------------------------------
-    // 4. 회전 상태 마우스 드래그 보정 (requestAnimationFrame)
-    // -------------------------------------------------------------
-    const mapWrapperEl = document.getElementById("map-wrapper");
-
-    let isDragging = false;
-    let startX = 0, startY = 0;
-    let accumulatedDx = 0;
-    let accumulatedDy = 0;
-    let animationFrameId = null;
-
-    function processPan() {
-      if (accumulatedDx !== 0 || accumulatedDy !== 0) {
-        const rad = (currentAngle * Math.PI) / 180;
-
-        // 회전된 화면 좌표계를 원래 지도 좌표계로 역변환 (scale(2) 보정)
-        const correctedDx = (accumulatedDx * Math.cos(rad) + accumulatedDy * Math.sin(rad)) / 2;
-        const correctedDy = (-accumulatedDx * Math.sin(rad) + accumulatedDy * Math.cos(rad)) / 2;
-
-        map.panBy(-correctedDx, -correctedDy);
-
-        accumulatedDx = 0;
-        accumulatedDy = 0;
-      }
-
-      if (isDragging) {
-        animationFrameId = requestAnimationFrame(processPan);
-      }
-    }
-
-    mapWrapperEl.addEventListener("mousedown", (e) => {
-      if (currentAngle === 0) return; // 0도일 때는 카카오맵 기본 드래그 사용
-      if (e.button !== 0) return; // 좌클릭만 처리
-
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      accumulatedDx = 0;
-      accumulatedDy = 0;
-
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      animationFrameId = requestAnimationFrame(processPan);
-    });
-
-    window.addEventListener("mousemove", (e) => {
-      if (!isDragging || currentAngle === 0) return;
-
-      accumulatedDx += (e.clientX - startX);
-      accumulatedDy += (e.clientY - startY);
-
-      startX = e.clientX;
-      startY = e.clientY;
-    });
-
-    window.addEventListener("mouseup", () => {
-      if (!isDragging) return;
-      isDragging = false;
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-      }
-    });
-
-    // -------------------------------------------------------------
-    // 5. 역회전 적용 마커 이미지 생성 (Canvas)
+    // 4. 역회전 적용 마커 이미지 생성 (Canvas)
     // -------------------------------------------------------------
     function createNumberMarker(num, mapAngle = 0) {
       const displaySize = 10;
@@ -262,7 +199,7 @@
     }
 
     // -------------------------------------------------------------
-    // 6. CSV 데이터 로드 및 마커 생성
+    // 5. CSV 데이터 로드 및 마커 생성
     // -------------------------------------------------------------
     function parseCSV(text) {
       const rows = text.trim().split("\n").map(line => {
