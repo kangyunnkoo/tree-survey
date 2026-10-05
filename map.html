@@ -21,7 +21,10 @@
       overflow: hidden;
     }
 
-    /* 100% 크기에서 transform: scale(2) 및 회전 적용 */
+    /* 
+      100% 크기에서 transform: scale(2) 및 회전 적용
+      transform-origin: center center로 정중앙 기준 변형
+    */
     #map {
       width: 100%;
       height: 100%;
@@ -62,16 +65,16 @@
   </div>
 
   <script>
-    // URL 파라미터 파싱
+    // -------------------------------------------------------------
+    // 1. URL 파라미터 파싱 및 지도 초기화
+    // -------------------------------------------------------------
     const params = new URLSearchParams(window.location.search);
     const csvUrl = params.get("csv");
     const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본값: 서울시청
     const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
 
-    // 초기 중심 좌표 지정
     const initialCenter = new kakao.maps.LatLng(centerLat, centerLng);
 
-    // 지도 생성 (level: 1)
     const mapContainer = document.getElementById("map");
     const mapOption = {
       center: initialCenter,
@@ -79,10 +82,10 @@
     };
     const map = new kakao.maps.Map(mapContainer, mapOption);
 
-    // 생성된 마커 및 번호 데이터 추적 배열
+    // 생성된 마커 객체 추적 배열
     const markerList = [];
 
-    // 1. InfoWindow 추적 관리
+    // InfoWindow 추적 관리
     let currentInfoWindow = null;
 
     kakao.maps.event.addListener(map, 'click', function() {
@@ -93,7 +96,7 @@
     });
 
     // -------------------------------------------------------------
-    // 2. 확대/축소(Zoom) 시 화면 중심 고정 보정 로직
+    // 2. 확대/축소(Zoom) 시 화면 중심 고정 보정
     // -------------------------------------------------------------
     let zoomStartCenter = null;
 
@@ -108,11 +111,9 @@
     });
 
     // -------------------------------------------------------------
-    // 3. 정확한 중심 기준 회전 & 마커 역회전 & 정밀 드래그
+    // 3. 지도 회전 및 마커 역회전 제어
     // -------------------------------------------------------------
     let currentAngle = 0;
-    let isDragging = false;
-    let startX = 0, startY = 0;
 
     function rotateMap() {
       // 회전 직전 사용자가 보고 있던 실제 중심 좌표 저장
@@ -121,28 +122,28 @@
       currentAngle = (currentAngle + 90) % 360;
       const mapEl = document.getElementById("map");
       
-      // CSS 변수로 회전 적용
+      // CSS 변수로 지도 회전 적용
       mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
       document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (현재 ${currentAngle}°)`;
 
-      // 기본 카카오맵 드래그 이벤트와 커스텀 마우스 드래그의 충돌 방지를 위해 회전 시 기본 드래그는 비활성화
+      // 0도가 아닐 때는 카카오맵 기본 드래그 비활성화 (커스텀 드래그가 처리)
       if (currentAngle !== 0) {
         map.setDraggable(false);
       } else {
         map.setDraggable(true);
       }
 
-      // 회전각의 반대 방향으로 모든 마커 이미지 역회전 갱신
+      // 회전 각도의 역방향으로 모든 마커 숫자 이미지 재렌더링
       updateMarkersRotation(currentAngle);
 
-      // 회전 애니메이션 완료 후 정확히 기존 화면 중앙 위치로 복원
+      // 회전 트랜지션 완료 후 화면 중앙 위치 유지
       setTimeout(() => {
         map.relayout();
         map.setCenter(visualCenter);
       }, 300);
     }
 
-    // 모든 마커를 지도 회전각의 역방향으로 다시 그려서 교체하는 함수
+    // 마커 역회전 일괄 업데이트
     function updateMarkersRotation(mapAngle) {
       markerList.forEach(item => {
         const newImage = createNumberMarker(item.no, mapAngle);
@@ -150,49 +151,75 @@
       });
     }
 
-    // 회전 상태일 때의 커스텀 마우스 드래그 이동 정밀 보정
+    // -------------------------------------------------------------
+    // 4. 회전 상태 마우스 드래그 보정 (requestAnimationFrame)
+    // -------------------------------------------------------------
     const mapWrapperEl = document.getElementById("map-wrapper");
 
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let accumulatedDx = 0;
+    let accumulatedDy = 0;
+    let animationFrameId = null;
+
+    function processPan() {
+      if (accumulatedDx !== 0 || accumulatedDy !== 0) {
+        const rad = (currentAngle * Math.PI) / 180;
+
+        // 회전된 화면 좌표계를 원래 지도 좌표계로 역변환 (scale(2) 보정)
+        const correctedDx = (accumulatedDx * Math.cos(rad) + accumulatedDy * Math.sin(rad)) / 2;
+        const correctedDy = (-accumulatedDx * Math.sin(rad) + accumulatedDy * Math.cos(rad)) / 2;
+
+        map.panBy(-correctedDx, -correctedDy);
+
+        accumulatedDx = 0;
+        accumulatedDy = 0;
+      }
+
+      if (isDragging) {
+        animationFrameId = requestAnimationFrame(processPan);
+      }
+    }
+
     mapWrapperEl.addEventListener("mousedown", (e) => {
-      if (currentAngle === 0) return; // 0도일 때는 카카오맵 기본 드래그 동작
+      if (currentAngle === 0) return; // 0도일 때는 카카오맵 기본 드래그 사용
       if (e.button !== 0) return; // 좌클릭만 처리
 
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
+      accumulatedDx = 0;
+      accumulatedDy = 0;
+
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      animationFrameId = requestAnimationFrame(processPan);
     });
 
     window.addEventListener("mousemove", (e) => {
       if (!isDragging || currentAngle === 0) return;
 
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+      accumulatedDx += (e.clientX - startX);
+      accumulatedDy += (e.clientY - startY);
 
       startX = e.clientX;
       startY = e.clientY;
-
-      // 화면 회전각(currentAngle)을 라디안으로 변환
-      const rad = (currentAngle * Math.PI) / 180;
-
-      // scale(2) 적용 상태 및 회전 좌표계 정밀 역변환
-      // 화면이 회전함에 따라 마우스 이동 벡터를 지도 원래 좌표계로 매핑
-      const correctedDx = (dx * Math.cos(rad) + dy * Math.sin(rad)) / 2;
-      const correctedDy = (-dx * Math.sin(rad) + dy * Math.cos(rad)) / 2;
-
-      // panBy는 (x, y) 픽셀만큼 지도를 이동시킴 (음수 부호 적용)
-      map.panBy(-correctedDx, -correctedDy);
     });
 
     window.addEventListener("mouseup", () => {
+      if (!isDragging) return;
       isDragging = false;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
     });
 
     // -------------------------------------------------------------
-    // 4. 역회전 보정이 포함된 고해상도 마커 생성 함수
+    // 5. 역회전 적용 마커 이미지 생성 (Canvas)
     // -------------------------------------------------------------
     function createNumberMarker(num, mapAngle = 0) {
       const displaySize = 10;
-      const scale = 2; // 레티나 보정
+      const scale = 2; // 고해상도 레티나 보정
 
       const canvas = document.createElement("canvas");
       canvas.width = displaySize * scale;
@@ -201,23 +228,23 @@
       const ctx = canvas.getContext("2d");
       ctx.scale(scale, scale);
 
-      // 캔버스 중심을 기준으로 지도 회전각의 역방향(-mapAngle) 회전 적용
+      // Canvas 중심 기준 지도 회전각의 역방향(-mapAngle) 회전
       ctx.translate(displaySize / 2, displaySize / 2);
       const rad = (-mapAngle * Math.PI) / 180;
       ctx.rotate(rad);
 
-      // 원형 배경 (어두운 딥 블루)
+      // 원형 배경 (딥 블루)
       ctx.fillStyle = "#0d47a1";
       ctx.beginPath();
       ctx.arc(0, 0, displaySize / 2, 0, Math.PI * 2);
       ctx.fill();
 
-      // 얇은 흰색 테두리
+      // 테두리 (흰색)
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 0.5;
       ctx.stroke();
 
-      // 고해상도 선명 폰트 출력
+      // 텍스트 출력
       ctx.fillStyle = "#ffffff";
       const fontSize = String(num).length >= 2 ? "5.5px" : "6.5px";
       ctx.font = `bold ${fontSize} 'Malgun Gothic', Arial, sans-serif`;
@@ -234,6 +261,9 @@
       return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
     }
 
+    // -------------------------------------------------------------
+    // 6. CSV 데이터 로드 및 마커 생성
+    // -------------------------------------------------------------
     function parseCSV(text) {
       const rows = text.trim().split("\n").map(line => {
         const matches = line.match(/("([^"]|"")*"|[^,]+)(?=,|$)/g);
@@ -267,7 +297,7 @@
           map: map
         });
 
-        // 생성된 마커와 번호 추적 배열에 등록
+        // 추적 목록에 저장
         markerList.push({
           no: row.no,
           marker: marker
@@ -292,7 +322,7 @@
       });
     }
 
-    // 페이지 로드 시 레이아웃 재배치 및 지정된 centerLat, centerLng 좌표로 화면 정중앙 고정
+    // 초기 레이아웃 재배치 및 지정된 파라미터 중심좌표 고정
     setTimeout(() => {
       map.relayout();
       map.setCenter(initialCenter);
