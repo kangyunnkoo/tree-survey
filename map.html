@@ -9,7 +9,7 @@
       padding: 0;
       width: 100%;
       height: 100%;
-      overflow: hidden; /* 스크롤바 튀어남 방지 */
+      overflow: auto; /* 2배 확대된 영역 스크롤 지원 */
     }
 
     /* 지도 래퍼 */
@@ -17,24 +17,20 @@
       width: 100%;
       height: 100%;
       position: relative;
-      overflow: hidden;
     }
 
-    /* [수정] 2배 크기 지정, transform-origin을 중심(50% 50%)으로 지정 */
+    /* [수정] 2배 크기(scale(2)) 및 뷰포트 중앙 기준 회전/확대 적용 */
     #map {
       width: 200%;
       height: 200%;
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      transform: scale(1) rotate(var(--map-rotate, 0deg));
-      transform-origin: 50% 50%; /* 화면 중앙을 회전 축으로 설정 */
-      transition: transform 0.3s ease; /* 회전시 부드러운 전환 */
+      transform: scale(2) rotate(var(--map-rotate, 0deg));
+      transform-origin: 25% 25%; /* 200% 크기에서 화면 기준 중앙축을 맞추는 기준점 */
+      transition: transform 0.3s ease; /* 회전 시 부드러운 애니메이션 */
     }
 
     /* 우측 상단 회전 버튼 스타일 */
     #rotate-btn {
-      position: absolute;
+      position: fixed; /* 스크롤 시에도 화면 우측 상단 고정 */
       top: 15px;
       right: 15px;
       z-index: 10;
@@ -98,27 +94,27 @@
     let startX = 0, startY = 0;
 
     function rotateMap() {
-      // 1) 회전 전 현재 보고 있는 화면의 정확한 중심 좌표(위도, 경도) 저장
+      // 1) 회전 전 현재 보고 있는 지도 중심 좌표 저장
       const currentCenter = map.getCenter();
 
       currentAngle = (currentAngle + 90) % 360;
       const mapEl = document.getElementById("map");
       
-      // CSS 변수로 지도 회전 적용
+      // CSS 변수로 회전만 변경 (scale(2)는 유지)
       mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
       document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (현재 ${currentAngle}°)`;
 
-      // 0도가 아닐 때는 카카오맵 기본 드래그를 끄고, 커스텀 역계산 드래그 활성화
+      // 0도가 아닐 때는 카카오맵 기본 드래그를 끄고 커스텀 드래그 사용
       if (currentAngle !== 0) {
         map.setDraggable(false);
       } else {
         map.setDraggable(true);
       }
 
-      // 2) 회전 애니메이션 전환 후 타일 재배치 및 '기존 중심 좌표'로 강제 재고정
+      // 2) 회전 후 타일 재배치 및 보던 좌표로 중심 복원
       setTimeout(() => {
         map.relayout();
-        map.setCenter(currentCenter); // 회전 전 보던 바로 그 위치로 복원
+        map.setCenter(currentCenter);
       }, 300);
     }
 
@@ -126,7 +122,7 @@
     const mapWrapperEl = document.getElementById("map-wrapper");
 
     mapWrapperEl.addEventListener("mousedown", (e) => {
-      if (currentAngle === 0) return; // 0도일 때는 카카오맵 기본 드래그 사용
+      if (currentAngle === 0) return; // 0도일 때는 카카오맵 기본 드래그
       if (e.button !== 0) return;
 
       isDragging = true;
@@ -147,10 +143,11 @@
       const rad = (currentAngle * Math.PI) / 180;
 
       // 마우스 이동 방향 벡터를 현재 지도 회전각만큼 역회전 변환
-      const correctedDx = dx * Math.cos(rad) + dy * Math.sin(rad);
-      const correctedDy = -dx * Math.sin(rad) + dy * Math.cos(rad);
+      // CSS scale(2) 상태이므로 이동 변화량도 절반(/2)으로 정밀 보정
+      const correctedDx = (dx * Math.cos(rad) + dy * Math.sin(rad)) / 2;
+      const correctedDy = (-dx * Math.sin(rad) + dy * Math.cos(rad)) / 2;
 
-      // 카카오맵의 픽셀 단위 지도 이동 API 호출
+      // 카카오맵 픽셀 단위 지도 이동
       map.panBy(-correctedDx, -correctedDy);
     });
 
