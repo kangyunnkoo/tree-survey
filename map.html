@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <title>수목 위치도</title>
   <style>
-    /* 스크롤바 완전 제거 및 화면 가득 차게 설정 */
+    /* 화면 전체를 가득 채우고 스크롤 제거 */
     html, body {
       margin: 0;
       padding: 0;
       width: 100vw;
       height: 100vh;
-      overflow: hidden; /* 불필요한 스크롤바 제거 */
+      overflow: hidden;
       background-color: #000;
     }
 
@@ -21,13 +21,16 @@
       overflow: hidden;
     }
 
-    /* 회전 시 여백이 보이지 않도록 영역을 약간 넓게 잡고 scale(2) 적용 */
+    /* 
+      100% 크기에서 transform: scale(2) 및 회전 적용
+      transform-origin: center center로 정중앙 기준 변형
+    */
     #map {
       width: 100%;
       height: 100%;
       transform: scale(2) rotate(var(--map-rotate, 0deg));
-      transform-origin: center center; /* 회전 축을 항상 화면 중앙으로 고정 */
-      transition: transform 0.3s ease; /* 회전 시 부드러운 전환 */
+      transform-origin: center center;
+      transition: transform 0.3s ease;
     }
 
     /* 우측 상단 회전 버튼 */
@@ -51,11 +54,6 @@
     #rotate-btn:hover {
       background: #f0f0f0;
     }
-    /* 카카오맵 내부 타일 이미지들에 그레이스케일 및 불투명도/흐림 효과 적용 */
-    /*#map .leaflet-tile-container img, 
-    #map img[src*="daumcdn.net"] {
-        filter: opacity(0.7) blur(0.5px);
-    }*/
   </style>
   <!-- 카카오맵 JS SDK -->
   <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
@@ -70,18 +68,21 @@
     // URL 파라미터 파싱
     const params = new URLSearchParams(window.location.search);
     const csvUrl = params.get("csv");
-    const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본: 서울시청
+    const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본값: 서울시청
     const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
 
-    // 지도 생성 (level: 1로 처음부터 2배 근접 확대)
+    // 초기 중심 좌표 지정
+    const initialCenter = new kakao.maps.LatLng(centerLat, centerLng);
+
+    // 지도 생성 (level: 1)
     const mapContainer = document.getElementById("map");
     const mapOption = {
-      center: new kakao.maps.LatLng(centerLat, centerLng),
+      center: initialCenter,
       level: 1
     };
     const map = new kakao.maps.Map(mapContainer, mapOption);
 
-    // 1. InfoWindow 관리 변수
+    // 1. InfoWindow 추적 관리
     let currentInfoWindow = null;
 
     kakao.maps.event.addListener(map, 'click', function() {
@@ -92,38 +93,54 @@
     });
 
     // -------------------------------------------------------------
-    // 2. 현재 보이는 화면 중심 기준 지도 회전
+    // 2. 확대/축소(Zoom) 시 화면 중심 고정 보정 로직
+    // -------------------------------------------------------------
+    let zoomStartCenter = null;
+
+    // 줌 시작 전 현재 보고 있는 화면 정중앙 좌표 채록
+    kakao.maps.event.addListener(map, 'zoom_start', function() {
+      zoomStartCenter = map.getCenter();
+    });
+
+    // 줌 완료 후 채록해둔 중앙 좌표로 즉시 재고정
+    kakao.maps.event.addListener(map, 'zoom_changed', function() {
+      if (zoomStartCenter) {
+        map.setCenter(zoomStartCenter);
+      }
+    });
+
+    // -------------------------------------------------------------
+    // 3. 정확한 중심 기준 회전 및 드래그 제어
     // -------------------------------------------------------------
     let currentAngle = 0;
     let isDragging = false;
     let startX = 0, startY = 0;
 
     function rotateMap() {
-      // 핵심: 회전하기 바로 전, 현재 사용자가 보고 있는 중심 좌표 추출
+      // 회전 직전 사용자가 보고 있던 실제 중심 좌표 저장
       const visualCenter = map.getCenter();
 
       currentAngle = (currentAngle + 90) % 360;
       const mapEl = document.getElementById("map");
       
-      // CSS 변수로 회전 적용
+      // CSS 변수로 회전만 변경
       mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
       document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (현재 ${currentAngle}°)`;
 
-      // 회전각이 0도가 아닐 때는 카카오맵 자체 드래그 방지 후 커스텀 마우스 드래그 처리
       if (currentAngle !== 0) {
         map.setDraggable(false);
       } else {
         map.setDraggable(true);
       }
 
-      // 회전 전환 애니메이션(0.3s) 후 지도의 레이아웃과 중심점을 정확히 재맞춤
+      // 회전 애니메이션 완료 후 정확히 기존 화면 중앙 위치로 복원
       setTimeout(() => {
         map.relayout();
         map.setCenter(visualCenter);
       }, 300);
     }
 
-    // 회전 상태일 때의 마우스 커스텀 드래그 로직 (확대/축소 상태 관계없이 정확히 작동)
+    // 커스텀 드래그 이벤트 (회전 상태에서 drag 시)
     const mapWrapperEl = document.getElementById("map-wrapper");
 
     mapWrapperEl.addEventListener("mousedown", (e) => {
@@ -144,8 +161,8 @@
       startX = e.clientX;
       startY = e.clientY;
 
-      // 현재 회전각에 맞춰 마우스 이동 좌표계 회전 변환
       const rad = (currentAngle * Math.PI) / 180;
+      // scale(2) 적용 상태에 맞춰 이동량 정밀 보정
       const correctedDx = (dx * Math.cos(rad) + dy * Math.sin(rad)) / 2;
       const correctedDy = (-dx * Math.sin(rad) + dy * Math.cos(rad)) / 2;
 
@@ -157,11 +174,11 @@
     });
 
     // -------------------------------------------------------------
-    // 3. 고해상도 번호 마커 및 데이터 로드
+    // 4. 고해상도 마커 생성 및 데이터 로드
     // -------------------------------------------------------------
     function createNumberMarker(num) {
       const displaySize = 10;
-      const scale = 2; // 레티나 선명도 보정
+      const scale = 2; // 선명도 보정
 
       const canvas = document.createElement("canvas");
       canvas.width = displaySize * scale;
@@ -246,10 +263,10 @@
       });
     }
 
-    // 초기화 시 레이아웃 맞춤
+    // 페이지 로드 시 레이아웃 재배치 및 지정된 centerLat, centerLng 좌표로 화면 정중앙 고정
     setTimeout(() => {
       map.relayout();
-      map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
+      map.setCenter(initialCenter);
     }, 200);
 
     drawMarkers();
