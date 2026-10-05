@@ -49,6 +49,7 @@
     };
     const map = new kakao.maps.Map(mapContainer, mapOption);
 
+    /*
     // Canvas로 번호 마커 이미지 생성 함수
     function createNumberMarker(num) {
       //const size = 18;
@@ -86,7 +87,54 @@
     
       return new kakao.maps.MarkerImage(canvas.toDataURL(), imageSize, imageOption);
     }
+    */
 
+    // Canvas 선명도 보정(Super-sampling) 적용 번호 마커 함수
+function createNumberMarker(num) {
+  const displaySize = 10; // 지표에 실제 표시될 마커 크기
+  const scale = 2;        // [핵심] 캔버스 내부 해상도를 2배로 뻥튀기하여 렌더링
+
+  const canvas = document.createElement("canvas");
+  // 캔버스 자체 내부 해상도는 20x20으로 고해상도 처리
+  canvas.width = displaySize * scale;
+  canvas.height = displaySize * scale;
+
+  const ctx = canvas.getContext("2d");
+
+  // 2배 크기로 픽셀 스케일 업
+  ctx.scale(scale, scale);
+
+  // 1. 원형 배경 (어두운 딥 블루)
+  ctx.fillStyle = "#0d47a1";
+  ctx.beginPath();
+  ctx.arc(displaySize / 2, displaySize / 2, displaySize / 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 2. [추가] 얇은 흰색 테두리를 줘서 배율 확대 시 찌그러짐 방지
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // 3. 고해상도 선명 폰트 출력
+  ctx.fillStyle = "#ffffff";
+  // 한 자릿수/두 자릿수 대응 폰트 크기 동적 조절
+  const fontSize = String(num).length >= 2 ? "5.5px" : "6.5px";
+  ctx.font = `bold ${fontSize} 'Malgun Gothic', Arial, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // 중앙 위치 렌더링 (픽셀 정렬 보정)
+  ctx.fillText(num, displaySize / 2, displaySize / 2 + 0.3);
+
+  // 마커 이미지는 카카오맵에 원래 원했던 10x10 크기로 축소하여 전달 (압축 효과로 텍스트 선명도 극대화)
+  const imageSize = new kakao.maps.Size(displaySize, displaySize);
+  const imageOption = {
+    offset: new kakao.maps.Point(displaySize / 2, displaySize / 2)
+  };
+
+  return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
+}
+    
     function parseCSV(text) {
       const rows = text.trim().split("\n").map(line => {
         //const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
