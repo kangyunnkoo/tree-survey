@@ -56,7 +56,7 @@
 </head>
 <body>
   <div id="map-wrapper">
-    <!-- 회전 버튼 추가 -->
+    <!-- 회전 버튼 -->
     <button id="rotate-btn" onclick="rotateMap()">↻ 90° 회전 (현재 0°)</button>
     <div id="map"></div>
   </div>
@@ -87,22 +87,78 @@
       }
     });
 
-    // 3. 지도 90도 회전 기능
+    // -------------------------------------------------------------
+    // 3. 지도 90도 회전 및 마우스 드래그 방향 역계산 보정 로직
+    // -------------------------------------------------------------
     let currentAngle = 0;
+    let isDragging = false;
+    let startX = 0, startY = 0;
+
     function rotateMap() {
       currentAngle = (currentAngle + 90) % 360;
       const mapEl = document.getElementById("map");
       
-      // CSS 변수 변경으로 회전 적용
+      // CSS 변수로 지도 회전 적용
       mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
       document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (현재 ${currentAngle}°)`;
 
-      // 회전 후 맵 재계산 (타일 레이아웃 보정)
+      // 0도가 아닐 때는 카카오맵 기본 드래그를 끄고, 커스텀 역계산 드래그 활성화
+      if (currentAngle !== 0) {
+        map.setDraggable(false);
+      } else {
+        map.setDraggable(true);
+      }
+
       setTimeout(() => {
         map.relayout();
         map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
       }, 300);
     }
+
+    // 마우스 커스텀 드래그 이벤트 (회전 상태일 때만 동작)
+    const mapWrapperEl = document.getElementById("map-wrapper");
+
+    mapWrapperEl.addEventListener("mousedown", (e) => {
+      // 0도일 때는 카카오맵 자체 기본 드래그를 사용함
+      if (currentAngle === 0) return;
+      
+      // 우클릭 등 기타 클릭 제외
+      if (e.button !== 0) return;
+
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!isDragging || currentAngle === 0) return;
+
+      // 화면상 마우스 이동 변위 계산
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      startX = e.clientX;
+      startY = e.clientY;
+
+      // 회전 각도(라디안) 계산
+      const rad = (currentAngle * Math.PI) / 180;
+
+      // 마우스 이동 방향 벡터를 현재 지도 회전각만큼 역회전 변환
+      // CSS scale(2) 효과가 적용되어 있으므로 변위도 절반(/2)으로 정밀 보정
+      const correctedDx = (dx * Math.cos(rad) + dy * Math.sin(rad)) / 2;
+      const correctedDy = (-dx * Math.sin(rad) + dy * Math.cos(rad)) / 2;
+
+      // 카카오맵의 픽셀 단위 지도 이동 API 호출
+      map.panBy(-correctedDx, -correctedDy);
+    });
+
+    window.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+
+    // -------------------------------------------------------------
+    // 4. 고해상도 번호 마커 및 데이터 로드 기능
+    // -------------------------------------------------------------
 
     // Canvas 선명도 보정(Super-sampling) 적용 번호 마커 함수
     function createNumberMarker(num) {
