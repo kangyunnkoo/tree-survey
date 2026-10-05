@@ -108,7 +108,7 @@
     });
 
     // -------------------------------------------------------------
-    // 3. 정확한 중심 기준 회전 & 마커 역회전 재렌더링 제어
+    // 3. 정확한 중심 기준 회전 & 마커 역회전 & 정밀 드래그
     // -------------------------------------------------------------
     let currentAngle = 0;
     let isDragging = false;
@@ -125,13 +125,14 @@
       mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
       document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (현재 ${currentAngle}°)`;
 
+      // 기본 카카오맵 드래그 이벤트와 커스텀 마우스 드래그의 충돌 방지를 위해 회전 시 기본 드래그는 비활성화
       if (currentAngle !== 0) {
         map.setDraggable(false);
       } else {
         map.setDraggable(true);
       }
 
-      // [핵심] 지도 회전각의 반대 방향으로 모든 마커 이미지 일괄 갱신
+      // 회전각의 반대 방향으로 모든 마커 이미지 역회전 갱신
       updateMarkersRotation(currentAngle);
 
       // 회전 애니메이션 완료 후 정확히 기존 화면 중앙 위치로 복원
@@ -149,12 +150,12 @@
       });
     }
 
-    // 커스텀 드래그 이벤트 (회전 상태에서 drag 시)
+    // 회전 상태일 때의 커스텀 마우스 드래그 이동 정밀 보정
     const mapWrapperEl = document.getElementById("map-wrapper");
 
     mapWrapperEl.addEventListener("mousedown", (e) => {
-      if (currentAngle === 0) return;
-      if (e.button !== 0) return;
+      if (currentAngle === 0) return; // 0도일 때는 카카오맵 기본 드래그 동작
+      if (e.button !== 0) return; // 좌클릭만 처리
 
       isDragging = true;
       startX = e.clientX;
@@ -170,10 +171,15 @@
       startX = e.clientX;
       startY = e.clientY;
 
+      // 화면 회전각(currentAngle)을 라디안으로 변환
       const rad = (currentAngle * Math.PI) / 180;
+
+      // scale(2) 적용 상태 및 회전 좌표계 정밀 역변환
+      // 화면이 회전함에 따라 마우스 이동 벡터를 지도 원래 좌표계로 매핑
       const correctedDx = (dx * Math.cos(rad) + dy * Math.sin(rad)) / 2;
       const correctedDy = (-dx * Math.sin(rad) + dy * Math.cos(rad)) / 2;
 
+      // panBy는 (x, y) 픽셀만큼 지도를 이동시킴 (음수 부호 적용)
       map.panBy(-correctedDx, -correctedDy);
     });
 
@@ -195,12 +201,12 @@
       const ctx = canvas.getContext("2d");
       ctx.scale(scale, scale);
 
-      // [핵심] 캔버스 중심을 기준으로 지도 회전각의 역방향(-mapAngle) 회전 적용
+      // 캔버스 중심을 기준으로 지도 회전각의 역방향(-mapAngle) 회전 적용
       ctx.translate(displaySize / 2, displaySize / 2);
       const rad = (-mapAngle * Math.PI) / 180;
       ctx.rotate(rad);
 
-      // 원형 배경 (어두운 딥 블루) - 캔버스 중심점이 (0,0)으로 이동했으므로 위치 보정
+      // 원형 배경 (어두운 딥 블루)
       ctx.fillStyle = "#0d47a1";
       ctx.beginPath();
       ctx.arc(0, 0, displaySize / 2, 0, Math.PI * 2);
