@@ -98,24 +98,26 @@
         });
       }
 
-      // 지도 클릭 이벤트 (사용자 마커)
+      // 지도 클릭 이벤트 (새 위치 선택)
       kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
-        const latlng = mouseEvent.latLng;
+        selectLocation(mouseEvent.latLng);
+      });
 
+      // 좌표 선택 공통 처리 함수
+      function selectLocation(latlng) {
         // 이전 사용자 마커 제거
         if (userMarker) userMarker.setMap(null);
-
-        // 기본 마커 사용
+      
+        // 클릭한 위치에 선택 마커 생성
         userMarker = new kakao.maps.Marker({
           position: latlng,
           map: map
         });
-
+      
         selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
-        coordsBox.textContent = `선택된 좌표 → 위도/경도 : ${selectedCoords.lat.toFixed(6)} ${selectedCoords.lng.toFixed(6)}`;
+        coordsBox.textContent = `선택된 좌표 → 위도: ${selectedCoords.lat.toFixed(6)}, 경도: ${selectedCoords.lng.toFixed(6)}`;
         saveBtn.disabled = false;
-      });
-
+      }
       // 저장 버튼 클릭 이벤트 (안전 패턴)
       saveBtn.addEventListener("click", async function() {
         if (!selectedCoords) return;
@@ -163,8 +165,10 @@
           alert("좌표 전송 중 오류가 발생했습니다.");
         }
       });
-
-    }
+      // 지도 타입 컨트롤(일반지도/위성지도 전환) 추가
+      const mapTypeControl = new kakao.maps.MapTypeControl();
+      map.addControl(mapTypeControl, kakao.maps.ControlPosition.TOPRIGHT);
+  }
   </script>
 </body>
 </html>
