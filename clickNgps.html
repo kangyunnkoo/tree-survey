@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>수목 위치 선택 (2배 확대 버튼 적용)</title>
+  <title>수목 위치 선택 (좌측 상단 확대 버튼)</title>
   <style>
     html, body { margin:0; padding:0; height:100%; overflow: hidden; }
     
@@ -26,11 +26,11 @@
       transform: scale(2);
     }
 
-    /* 우측 상단 2배 확대 토글 버튼 */
+    /* 화면 맨 왼쪽 위로 이동된 2배 확대 토글 버튼 */
     #zoom-toggle-btn {
       position: absolute;
       top: 15px;
-      right: 15px;
+      left: 15px;
       z-index: 10;
       background: #ffffff;
       color: #333333;
@@ -83,6 +83,7 @@
 </head>
 <body>
   <div id="map-wrapper">
+    <!-- 화면 맨 왼쪽 위 배치 -->
     <button id="zoom-toggle-btn">🔍 2배 확대 ON/OFF</button>
     <div id="map"></div>
   </div>
@@ -173,30 +174,16 @@
       }
 
       // -------------------------------------------------------------
-      // 3. 지도 클릭 이벤트 (확대 상태에 따른 동적 좌표 처리)
+      // 3. 지도 클릭 이벤트 (확대 상태에 따른 좌표 변환)
       // -------------------------------------------------------------
       mapContainer.addEventListener('click', function(e) {
-        let latlng;
+        const rect = mapContainer.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
 
-        if (isZoomed) {
-          // 2배 확대 모드일 때: DOM 클릭 픽셀 좌표 역산 보정
-          const rect = mapContainer.getBoundingClientRect();
-          const clickX = e.clientX - rect.left;
-          const clickY = e.clientY - rect.top;
-
-          const projection = map.getProjection();
-          const point = new kakao.maps.Point(clickX, clickY);
-          latlng = projection.coordsFromContainerPoint(point);
-        } else {
-          // 일반 모드일 때: 클릭한 지점 중심 좌표 변환 (기본 Projection)
-          const rect = mapContainer.getBoundingClientRect();
-          const clickX = e.clientX - rect.left;
-          const clickY = e.clientY - rect.top;
-
-          const projection = map.getProjection();
-          const point = new kakao.maps.Point(clickX, clickY);
-          latlng = projection.coordsFromContainerPoint(point);
-        }
+        const projection = map.getProjection();
+        const point = new kakao.maps.Point(clickX, clickY);
+        const latlng = projection.coordsFromContainerPoint(point);
 
         selectLocation(latlng);
       });
