@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>수목 위치 선택 (좌측 상단 확대 버튼)</title>
+  <title>수목 위치 선택 (2배 확대 마커 오류 수정)</title>
   <style>
     html, body { margin:0; padding:0; height:100%; overflow: hidden; }
     
@@ -13,7 +13,6 @@
       position: relative;
     }
 
-    /* scale(1) 기본 상태, .zoomed 클래스가 추가되면 scale(2) 적용 */
     #map {
       width: 100%;
       height: 100%;
@@ -26,7 +25,7 @@
       transform: scale(2);
     }
 
-    /* 화면 맨 왼쪽 위로 이동된 2배 확대 토글 버튼 */
+    /* 화면 맨 왼쪽 위 2배 확대 버튼 */
     #zoom-toggle-btn {
       position: absolute;
       top: 15px;
@@ -83,7 +82,6 @@
 </head>
 <body>
   <div id="map-wrapper">
-    <!-- 화면 맨 왼쪽 위 배치 -->
     <button id="zoom-toggle-btn">🔍 2배 확대 ON/OFF</button>
     <div id="map"></div>
   </div>
@@ -115,15 +113,12 @@
       const saveBtn = document.getElementById("saveBtn");
       const zoomBtn = document.getElementById("zoom-toggle-btn");
 
-      // 중심 마커 이미지 (빨간색)
       const centerImage = new kakao.maps.MarkerImage(
         "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png",
         new kakao.maps.Size(24, 35)
       );
 
-      // -------------------------------------------------------------
       // 1. 2배 확대 토글 버튼 이벤트
-      // -------------------------------------------------------------
       zoomBtn.addEventListener("click", function() {
         isZoomed = !isZoomed;
         
@@ -138,9 +133,7 @@
         }
       });
 
-      // -------------------------------------------------------------
       // 2. GPS로 현재 위치 가져오기
-      // -------------------------------------------------------------
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(position) {
           const lat = centerLat || position.coords.latitude;
@@ -173,24 +166,32 @@
         });
       }
 
-      // -------------------------------------------------------------
-      // 3. 지도 클릭 이벤트 (확대 상태에 따른 좌표 변환)
-      // -------------------------------------------------------------
+      // 3. 지도 클릭 이벤트 (Transform 보정 계산식 적용)
       mapContainer.addEventListener('click', function(e) {
         const rect = mapContainer.getBoundingClientRect();
-        const clickX = e.clientX - rect.left;
-        const clickY = e.clientY - rect.top;
+        
+        let clickX = e.clientX - rect.left;
+        let clickY = e.clientY - rect.top;
+
+        if (isZoomed) {
+          // transform: scale(2) 적용 시 중심점 기준 스케일 보정
+          const unscaledWidth = mapContainer.offsetWidth;
+          const unscaledHeight = mapContainer.offsetHeight;
+          
+          clickX = (clickX - unscaledWidth / 2) / 2 + unscaledWidth / 2;
+          clickY = (clickY - unscaledHeight / 2) / 2 + unscaledHeight / 2;
+        }
 
         const projection = map.getProjection();
         const point = new kakao.maps.Point(clickX, clickY);
         const latlng = projection.coordsFromContainerPoint(point);
 
-        selectLocation(latlng);
+        if (latlng) {
+          selectLocation(latlng);
+        }
       });
 
-      // -------------------------------------------------------------
-      // 4. 좌표 선택 공통 처리
-      // -------------------------------------------------------------
+      // 4. 마커 생성 및 좌표 저장
       function selectLocation(latlng) {
         if (userMarker) userMarker.setMap(null);
         
@@ -204,9 +205,7 @@
         saveBtn.disabled = false;
       }
 
-      // -------------------------------------------------------------
       // 5. 저장 및 Webhook 전송
-      // -------------------------------------------------------------
       saveBtn.addEventListener("click", async function() {
         if (!selectedCoords) return;
         
