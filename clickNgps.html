@@ -2,10 +2,54 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>수목 위치 선택</title>
+  <title>수목 위치 선택 (2배 확대 버튼 적용)</title>
   <style>
-    html, body { margin:0; padding:0; height:100%; }
-    #map { width:100%; height:85%; }
+    html, body { margin:0; padding:0; height:100%; overflow: hidden; }
+    
+    #map-wrapper {
+      width: 100%;
+      height: 85%;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* scale(1) 기본 상태, .zoomed 클래스가 추가되면 scale(2) 적용 */
+    #map {
+      width: 100%;
+      height: 100%;
+      transform: scale(1);
+      transform-origin: center center;
+      transition: transform 0.2s ease-in-out;
+    }
+
+    #map.zoomed {
+      transform: scale(2);
+    }
+
+    /* 우측 상단 2배 확대 토글 버튼 */
+    #zoom-toggle-btn {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      z-index: 10;
+      background: #ffffff;
+      color: #333333;
+      border: 1px solid #cccccc;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      user-select: none;
+    }
+
+    #zoom-toggle-btn.active {
+      background: #007bff;
+      color: #ffffff;
+      border-color: #0056b3;
+    }
+
     #panel {
       height:15%;
       display:flex;
@@ -15,6 +59,9 @@
       background:#f4f4f4;
       border-top:1px solid #ccc;
       font-size:14px;
+      box-sizing: border-box;
+      position: relative;
+      z-index: 10;
     }
     #coords { flex:1; }
     #saveBtn {
@@ -35,7 +82,10 @@
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
 </head>
 <body>
-  <div id="map"></div>
+  <div id="map-wrapper">
+    <button id="zoom-toggle-btn">🔍 2배 확대 ON/OFF</button>
+    <div id="map"></div>
+  </div>
   <div id="panel">
     <div id="coords">지도에서 수목 위치를 클릭하세요.</div>
     <button id="saveBtn" disabled>저장</button>
@@ -48,15 +98,21 @@
       const centerLat = parseFloat(params.get("centerLat"));
       const centerLng = parseFloat(params.get("centerLng"));
       const mapContainer = document.getElementById('map');
-      const mapOptions = { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 1 };
+      
+      const mapOptions = { 
+        center: new kakao.maps.LatLng(37.5665, 126.9780), 
+        level: 1 
+      };
       const map = new kakao.maps.Map(mapContainer, mapOptions);
 
       let centerMarker = null; // 현재 위치 마커
       let userMarker = null;   // 사용자가 클릭한 마커
       let selectedCoords = null;
+      let isZoomed = false;    // 2배 확대 상태 플래그
 
       const coordsBox = document.getElementById("coords");
       const saveBtn = document.getElementById("saveBtn");
+      const zoomBtn = document.getElementById("zoom-toggle-btn");
 
       // 중심 마커 이미지 (빨간색)
       const centerImage = new kakao.maps.MarkerImage(
@@ -64,7 +120,26 @@
         new kakao.maps.Size(24, 35)
       );
 
-      // GPS로 현재 위치 가져오기
+      // -------------------------------------------------------------
+      // 1. 2배 확대 토글 버튼 이벤트
+      // -------------------------------------------------------------
+      zoomBtn.addEventListener("click", function() {
+        isZoomed = !isZoomed;
+        
+        if (isZoomed) {
+          mapContainer.classList.add("zoomed");
+          zoomBtn.classList.add("active");
+          zoomBtn.textContent = "🔍 2배 확대 [켜짐]";
+        } else {
+          mapContainer.classList.remove("zoomed");
+          zoomBtn.classList.remove("active");
+          zoomBtn.textContent = "🔍 2배 확대 ON/OFF";
+        }
+      });
+
+      // -------------------------------------------------------------
+      // 2. GPS로 현재 위치 가져오기
+      // -------------------------------------------------------------
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(position) {
           const lat = centerLat || position.coords.latitude;
@@ -72,7 +147,6 @@
           const locPosition = new kakao.maps.LatLng(lat, lng);
           map.setCenter(locPosition);
 
-          // 중심 마커 표시
           centerMarker = new kakao.maps.Marker({
             position: locPosition,
             map: map,
@@ -98,32 +172,58 @@
         });
       }
 
-      // 지도 클릭 이벤트 (새 위치 선택)
-      kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
-        selectLocation(mouseEvent.latLng);
+      // -------------------------------------------------------------
+      // 3. 지도 클릭 이벤트 (확대 상태에 따른 동적 좌표 처리)
+      // -------------------------------------------------------------
+      mapContainer.addEventListener('click', function(e) {
+        let latlng;
+
+        if (isZoomed) {
+          // 2배 확대 모드일 때: DOM 클릭 픽셀 좌표 역산 보정
+          const rect = mapContainer.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const clickY = e.clientY - rect.top;
+
+          const projection = map.getProjection();
+          const point = new kakao.maps.Point(clickX, clickY);
+          latlng = projection.coordsFromContainerPoint(point);
+        } else {
+          // 일반 모드일 때: 클릭한 지점 중심 좌표 변환 (기본 Projection)
+          const rect = mapContainer.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const clickY = e.clientY - rect.top;
+
+          const projection = map.getProjection();
+          const point = new kakao.maps.Point(clickX, clickY);
+          latlng = projection.coordsFromContainerPoint(point);
+        }
+
+        selectLocation(latlng);
       });
 
-      // 좌표 선택 공통 처리 함수
+      // -------------------------------------------------------------
+      // 4. 좌표 선택 공통 처리
+      // -------------------------------------------------------------
       function selectLocation(latlng) {
-        // 이전 사용자 마커 제거
         if (userMarker) userMarker.setMap(null);
-      
-        // 클릭한 위치에 선택 마커 생성
+        
         userMarker = new kakao.maps.Marker({
           position: latlng,
           map: map
         });
-      
+        
         selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
         coordsBox.textContent = `선택된 좌표 → 위도: ${selectedCoords.lat.toFixed(6)}, 경도: ${selectedCoords.lng.toFixed(6)}`;
         saveBtn.disabled = false;
       }
-      // 저장 버튼 클릭 이벤트 (안전 패턴)
+
+      // -------------------------------------------------------------
+      // 5. 저장 및 Webhook 전송
+      // -------------------------------------------------------------
       saveBtn.addEventListener("click", async function() {
         if (!selectedCoords) return;
-      
+        
         try {
-
           const res = await fetch("https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -135,40 +235,33 @@
           });
 
           if (!res.ok) throw new Error("Webhook 응답 실패: " + res.status);
-      
+        
           alert("좌표가 Webhook으로 전송되었습니다!");
-      
-          // 1) 안전하게 닫기 시도: 먼저 간단한 검사
-          // window.opener 가 있거나 (내가 연 창) 모바일 WebView(예: 노션)는 닫을 수 있는 경우가 많음
+        
           const canClose = !!window.opener || /notion/i.test(navigator.userAgent) || /wv|webview|android.*version/i.test(navigator.userAgent);
-      
+        
           if (canClose) {
-            // 지연을 줘서(맵/알림 렌더링 완료) 닫기 시도
             setTimeout(() => {
               try {
                 window.close();
               } catch (e) {
                 console.warn("window.close() 실패:", e);
               }
-            }, 200); // 0.2초 지연 (필요시 300~500ms로 늘려도 됨)
+            }, 200);
             return;
           }
-      
-          // 2) 닫기 불가 환경(대부분 PC 브라우저)일 경우: 안내 또는 리다이렉트
-          // (노션으로 돌아가고 싶다면 노션 페이지 URL로 이동시키는 방법도 있음)
+        
           document.getElementById("coords").textContent = "좌표 전송 완료. 이 창을 닫아주세요.";
-          // 또는 자동 리다이렉트 (원치 않으면 주석 처리)
-          // window.location.href = "https://www.notion.so/"; 
           
         } catch (err) {
           console.error("저장 실패:", err);
           alert("좌표 전송 중 오류가 발생했습니다.");
         }
       });
-      // 지도 타입 컨트롤(일반지도/위성지도 전환) 추가
+
       const mapTypeControl = new kakao.maps.MapTypeControl();
       map.addControl(mapTypeControl, kakao.maps.ControlPosition.TOPRIGHT);
-  }
+    }
   </script>
 </body>
 </html>
