@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>DMC센트럴자이 수목조사 카카오맵 위치지도</title>
+    <style>
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; font-family: 'Noto Sans KR', sans-serif; }
+        #map { width: 100%; height: 100vh; }
+
+        /* 지도 버튼 컨트롤 */
+        .control-box {
+            position: absolute; top: 15px; right: 15px; z-index: 2;
+            background: #ffffff; border: 1px solid #cccccc; border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); display: flex; overflow: hidden;
+        }
+        .btn-map {
+            padding: 8px 14px; font-size: 13px; font-weight: bold; cursor: pointer;
+            border: none; background: #ffffff; color: #333333;
+        }
+        .btn-map.active { background: #2C3E50; color: #ffffff; }
+
+        /* 가독성 높은 원번호 마커 */
+        .circle-badge {
+            width: 28px; height: 28px; background-color: #E74C3C; color: #FFFFFF;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: bold; border: 2px solid #FFFFFF;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5); cursor: pointer;
+        }
+        .badge-warning { background-color: #F39C12; }
+
+        .info-box {
+            padding: 8px 12px; background: #FFFFFF; border-radius: 6px;
+            border: 1px solid #CCCCCC; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-size: 12px; color: #333333; line-height: 1.4;
+        }
+    </style>
+    <!-- 전달해주신 카카오 App Key 적용 -->
+    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <!-- 지도 유형 전환 버튼 (일반지도 / 위성지도) -->
+    <div class="control-box">
+        <button id="btnRoadmap" class="btn-map active" onclick="setMapType('roadmap')">일반지도</button>
+        <button id="btnSkyview" class="btn-map" onclick="setMapType('skyview')">위성지도</button>
+    </div>
+
+    <script>
+        const treeData = [
+            { id: 1, species: "전나무", status: "고사/4주", lat: 37.57947, lng: 126.903327 },
+            { id: 2, species: "왕벚나무", status: "고사/1주/재식재", lat: 37.579329, lng: 126.903277 },
+            { id: 3, species: "느티나무", status: "고사예비판정/1주", lat: 37.579305, lng: 126.903149 },
+            { id: 4, species: "전나무", status: "고사/1주/재식재", lat: 37.579166, lng: 126.902895 },
+            { id: 5, species: "산딸나무", status: "고사/2주", lat: 37.579324, lng: 126.90297 },
+            { id: 6, species: "전나무", status: "고사/2주", lat: 37.579443, lng: 126.902954 },
+            { id: 7, species: "전나무", status: "고사/1주/재식재", lat: 37.579495, lng: 126.902865 },
+            { id: 8, species: "전나무", status: "고사/1주", lat: 37.579517, lng: 126.902816 },
+            { id: 9, species: "전나무", status: "고사/3주/재식재", lat: 37.579524, lng: 126.902318 },
+            { id: 10, species: "전나무", status: "고사/2주", lat: 37.579839, lng: 126.903316 },
+            { id: 11, species: "전나무", status: "고사/2주", lat: 37.58014, lng: 126.903103 },
+            { id: 12, species: "매실나무", status: "고사/1주", lat: 37.580166, lng: 126.903186 },
+            { id: 13, species: "소나무(반송)", status: "고사/1주", lat: 37.580117, lng: 126.903569 },
+            { id: 14, species: "전나무", status: "고사/2주", lat: 37.580841, lng: 126.904882 },
+            { id: 15, species: "전나무", status: "고사/3주", lat: 37.580551, lng: 126.904965 },
+            { id: 16, species: "전나무", status: "고사/2주/재식재", lat: 37.580472, lng: 126.904938 },
+            { id: 17, species: "전나무", status: "고사/1주", lat: 37.580362, lng: 126.904816 },
+            { id: 18, species: "배롱나무", status: "고사/1주", lat: 37.580378, lng: 126.904533 },
+            { id: 19, species: "전나무", status: "고사/2주", lat: 37.580385, lng: 126.904355 },
+            { id: 20, species: "전나무", status: "고사/3주", lat: 37.580255, lng: 126.9042 },
+            { id: 21, species: "전나무", status: "고사/1주", lat: 37.579982, lng: 126.903857 },
+            { id: 22, species: "전나무", status: "고사/1주", lat: 37.57983, lng: 126.90371 },
+            { id: 23, species: "전나무", status: "고사/3주", lat: 37.579678, lng: 126.903602 },
+            { id: 24, species: "전나무", status: "고사/3주/재식재", lat: 37.579711, lng: 126.904101 },
+            { id: 25, species: "전나무", status: "고사/1주", lat: 37.579612, lng: 126.904002 },
+            { id: 26, species: "매실나무", status: "고사/2주", lat: 37.579385, lng: 126.903756 },
+            { id: 27, species: "전나무", status: "고사/1주/재식재", lat: 37.579266, lng: 126.903635 },
+            { id: 28, species: "전나무", status: "고사/1주", lat: 37.579179, lng: 126.903532 },
+            { id: 29, species: "전나무", status: "고사/1주", lat: 37.579097, lng: 126.903459 },
+            { id: 30, species: "전나무", status: "고사/1주", lat: 37.581033, lng: 126.904015 },
+            { id: 31, species: "전나무", status: "고사/1주", lat: 37.581088, lng: 126.903945 },
+            { id: 32, species: "전나무", status: "고사/1주", lat: 37.58117, lng: 126.903823 },
+            { id: 33, species: "전나무", status: "고사/1주", lat: 37.580864, lng: 126.903412 },
+            { id: 34, species: "전나무", status: "고사/2주", lat: 37.580543, lng: 126.902958 },
+            { id: 35, species: "전나무", status: "고사/1주", lat: 37.580832, lng: 126.902979 },
+            { id: 36, species: "전나무", status: "고사/3주", lat: 37.579537, lng: 126.90184 },
+            { id: 37, species: "전나무", status: "고사/1주", lat: 37.579641, lng: 126.901042 },
+            { id: 38, species: "소나무(장송)", status: "수간부후(심)/1주", lat: 37.57994, 126.901022 },
+            { id: 39, species: "소나무(장송)", status: "수간부후(심)/1주", lat: 37.579899, 126.900999 },
+            { id: 40, species: "전나무", status: "고사/2주/재식재", lat: 37.58, 126.901641 },
+            { id: 41, species: "전나무", status: "고사/1주/재식재", lat: 37.579908, 126.901404 },
+            { id: 42, species: "알수없음", status: "고사/1주", lat: 37.580174, 126.901447 },
+            { id: 43, species: "배롱나무", status: "고사/1주", lat: 37.58041, 126.902 }
+        ];
+
+        const map = new kakao.maps.Map(document.getElementById('map'), {
+            center: new kakao.maps.LatLng(37.5798, 126.9032),
+            level: 3
+        });
+
+        const infowindow = new kakao.maps.InfoWindow({ zIndex: 1 });
+
+        treeData.forEach(item => {
+            const position = new kakao.maps.LatLng(item.lat, item.lng);
+            const content = document.createElement('div');
+            content.className = item.status.includes('수간부후') || item.status.includes('예비판정') ? 'circle-badge badge-warning' : 'circle-badge';
+            content.innerText = item.id;
+
+            new kakao.maps.CustomOverlay({
+                position: position,
+                content: content,
+                map: map,
+                yAnchor: 0.5, xAnchor: 0.5
+            });
+
+            content.addEventListener('click', function() {
+                infowindow.setContent(`<div class="info-box"><strong>No. ${item.id} [${item.species}]</strong><br>상태: ${item.status}</div>`);
+                infowindow.setPosition(position);
+                infowindow.open(map);
+            });
+        });
+
+        function setMapType(maptype) {
+            const btnRoadmap = document.getElementById('btnRoadmap');
+            const btnSkyview = document.getElementById('btnSkyview');
+            if (maptype === 'roadmap') {
+                map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
+                btnRoadmap.className = 'btn-map active';
+                btnSkyview.className = 'btn-map';
+            } else {
+                map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+                btnRoadmap.className = 'btn-map';
+                btnSkyview.className = 'btn-map active';
+            }
+        }
+    </script>
+</body>
+</html>
