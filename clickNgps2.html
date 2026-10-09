@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 현장 조사 - 재전송 기능 포함</title>
+    <title>수목 현장 조사 - 검증 시스템 적용</title>
     <!-- 카카오 지도 API -->
     <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
     <style>
@@ -28,9 +28,9 @@
             background-color: #2b8a3e; color: white; font-weight: bold; 
             border: none; font-size: 16px; margin-top: 10px; cursor: pointer;
         }
-        .btn-send:active { background-color: #237032; }
+        .btn-send:disabled { background-color: #82c91e; cursor: not-allowed; }
 
-        /* 최근 전송 정보 디스플레이 및 재전송 영역 */
+        /* 최근 전송 정보 및 결과 상태 표시 박스 */
         #last-sent-box {
             margin-top: 12px;
             padding: 10px 12px;
@@ -39,7 +39,7 @@
             border-radius: 8px;
             font-size: 13px;
             color: #222;
-            display: none; /* 초기 숨김 */
+            display: none;
         }
         .last-sent-header {
             display: flex;
@@ -59,7 +59,6 @@
             height: auto;
             cursor: pointer;
         }
-        .btn-resend:active { background-color: #c92a2a; }
     </style>
 </head>
 <body>
@@ -80,12 +79,12 @@
     </div>
 
     <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="margin-top: 8px;">
-    <button class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
+    <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
 
-    <!-- 최근 전송 정보 및 재전송 박스 -->
+    <!-- 최근 전송 정보 디스플레이 및 수동 재전송 영역 -->
     <div id="last-sent-box">
         <div class="last-sent-header">
-            <strong style="color: #2b8a3e;">[최근 전송/시도 정보]</strong>
+            <strong id="status-title" style="color: #2b8a3e;">[노션 저장 완료]</strong>
             <button class="btn-resend" onclick="resendToNotion()">↻ 다시 전송</button>
         </div>
         <span id="last-sent-info">-</span>
@@ -93,7 +92,6 @@
 </div>
 
 <script>
-    // 1. URL 파라미터(master_id, lat, lng) 추출
     function getUrlParams() {
         var params = {};
         window.location.search.replace(/[?&]+([^=&]+)=([^&]*)/gi, function(str, key, value) {
@@ -104,37 +102,31 @@
 
     var params = getUrlParams();
     var masterId = params.master_id || ""; 
-    
     var defaultLat = params.lat ? parseFloat(params.lat) : 37.5794;
     var defaultLng = params.lng ? parseFloat(params.lng) : 126.9033;
 
-    // 2. 카카오 지도 생성
     var container = document.getElementById('map');
-    var options = { 
-        center: new kakao.maps.LatLng(defaultLat, defaultLng), 
-        level: 2 
-    };
+    var options = { center: new kakao.maps.LatLng(defaultLat, defaultLng), level: 2 };
     var map = new kakao.maps.Map(container, options);
 
     var currentLat = null;
     var currentLng = null;
-    var marker = new kakao.maps.Marker({ map: map });
+    var activeMarker = new kakao.maps.Marker({ map: map }); // 현재 찍고 있는 마커
+    var savedMarkers = []; // 저장 성공된 마커 모음
 
-    // 재전송을 위한 최근 payload 임시 저장 변수
     var lastPayload = null;
     var webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1";
 
-    // 3. 지도 터치/클릭 이벤트
+    // 지도 터치 이벤트
     kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
         var latLng = mouseEvent.latLng;
         currentLat = latLng.getLat();
         currentLng = latLng.getLng();
 
-        marker.setPosition(latLng);
+        activeMarker.setPosition(latLng);
         document.getElementById('coords').value = currentLat.toFixed(6) + ', ' + currentLng.toFixed(6);
     });
 
-    // 4. 노션 전송 메인 함수
     function sendToNotion() {
         var treeId = document.getElementById('treeId').value;
         var quantity = document.getElementById('quantity').value;
@@ -146,7 +138,6 @@
             return;
         }
 
-        // 전송 데이터 생성 및 최근 저장용 변수에 보관
         lastPayload = {
             master_id: masterId,
             tree_id: treeId,
@@ -160,46 +151,88 @@
         executeFetch(lastPayload);
     }
 
-    // 5. 서버 통신 처리 공통 함수
+    // 서버 전송 및 검증 처리 함수
     function executeFetch(payload) {
+        var sendBtn = document.getElementById('sendBtn');
+        sendBtn.disabled = true;
+        sendBtn.innerText = "노션 저장 확인 중...";
+
         fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         })
         .then(response => {
-            alert('노션 DB 전송 완료!');
+            if (!response.ok) {
+                throw new Error('서버 응답 오류 (' + response.status + ')');
+            }
+            return response.json(); // Make.com의 Webhook Response JSON 수신
+        })
+        .then(data => {
+            // Make.com에서 넘어온 status 검증
+            if (data && data.status === "success") {
+                alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
+                
+                // 저장 성공한 위치에 시각적 마커 남기기
+                var savedMarker = new kakao.maps.Marker({
+                    position: new kakao.maps.LatLng(payload.lat, payload.lng),
+                    map: map
+                });
+                savedMarkers.push(savedMarker);
 
-            // Display Field 업데이트
-            var displayBox = document.getElementById('last-sent-box');
-            var displayInfo = document.getElementById('last-sent-info');
-            
-            displayInfo.innerHTML = `번호: <b>${payload.tree_id}</b> | 수종: <b>${payload.species || '-'}</b> | 주수: <b>${payload.quantity}</b> | 상태: <b>${payload.status || '-'}</b><br>좌표: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}`;
-            displayBox.style.display = 'block';
+                // UI 업데이트
+                updateDisplayBox(payload, true);
 
-            // 입력 폼 초기화
-            document.getElementById('treeId').value = '';
-            document.getElementById('quantity').value = '';
-            document.getElementById('species').value = '';
-            document.getElementById('status').value = '';
-            document.getElementById('coords').value = '';
-            currentLat = null;
-            currentLng = null;
+                // 폼 초기화
+                document.getElementById('treeId').value = '';
+                document.getElementById('quantity').value = '';
+                document.getElementById('species').value = '';
+                document.getElementById('status').value = '';
+                document.getElementById('coords').value = '';
+                currentLat = null;
+                currentLng = null;
+            } else {
+                throw new Error('노션 DB 입력 처리 실패');
+            }
         })
         .catch(error => {
-            alert('전송 중 오류가 발생했습니다: ' + error);
+            alert('⚠️ [경고] 노션 저장에 실패했습니다!\n' + error.message + '\n하단의 [다시 전송] 버튼을 이용해 주세요.');
+            updateDisplayBox(payload, false);
+        })
+        .finally(() => {
+            sendBtn.disabled = false;
+            sendBtn.innerText = "노션 DB로 전송";
         });
     }
 
-    // 6. [다시 전송] 버튼 클릭 이벤트
+    // 디스플레이 영역 업데이트 함수
+    function updateDisplayBox(payload, isSuccess) {
+        var displayBox = document.getElementById('last-sent-box');
+        var statusTitle = document.getElementById('status-title');
+        var displayInfo = document.getElementById('last-sent-info');
+
+        if (isSuccess) {
+            displayBox.style.backgroundColor = '#f0fdf4';
+            displayBox.style.borderColor = '#2b8a3e';
+            statusTitle.style.color = '#2b8a3e';
+            statusTitle.innerText = '[노션 저장 완료]';
+        } else {
+            displayBox.style.backgroundColor = '#fff5f5';
+            displayBox.style.borderColor = '#e03131';
+            statusTitle.style.color = '#e03131';
+            statusTitle.innerText = '[저장 실패 - 재전송 필요]';
+        }
+
+        displayInfo.innerHTML = `번호: <b>${payload.tree_id}</b> | 수종: <b>${payload.species || '-'}</b> | 주수: <b>${payload.quantity}</b> | 상태: <b>${payload.status || '-'}</b><br>좌표: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}`;
+        displayBox.style.display = 'block';
+    }
+
     function resendToNotion() {
         if (!lastPayload) {
             alert('재전송할 최근 정보가 없습니다.');
             return;
         }
-        if (confirm(`[번호: ${lastPayload.tree_id}] 정보를 노션으로 다시 전송하시겠습니까?`)) {
-            executeFetch(lastPayload);
-        }
+        executeFetch(lastPayload);
     }
 </script>
 </body>
