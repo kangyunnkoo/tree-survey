@@ -3,13 +3,13 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 위치 선택 및 노션 DB 전송</title>
+    <title>수목 위치 선택 및 원번호 마커 노션 DB 전송</title>
     <style>
         html, body { margin:0; padding:0; height:100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         
         #map-wrapper {
             width: 100%;
-            height: 72%;
+            height: 74%;
             overflow: hidden;
             position: relative;
         }
@@ -50,9 +50,46 @@
             border-color: #0056b3;
         }
 
+        /* 원번호 마커 커스텀 오버레이 스타일 */
+        .number-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background-color: #2b8a3e;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: bold;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.1s ease;
+        }
+        .number-badge:active {
+            transform: scale(1.15);
+        }
+
+        /* 수목 정보 팝업(InfoWindow) 스타일 */
+        .info-pop {
+            padding: 8px 12px;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+            font-size: 12px;
+            line-height: 1.4;
+            color: #333;
+            border: 1px solid #2b8a3e;
+            white-space: nowrap;
+        }
+        .info-pop strong { color: #2b8a3e; }
+
+        /* 하단 컴팩트 수목 정보 입력 패널 */
         #panel {
-            height: 28%;
-            padding: 12px;
+            height: 26%;
+            padding: 8px 10px;
             background: #ffffff;
             border-top: 1px solid #ccc;
             box-sizing: border-box;
@@ -63,32 +100,33 @@
             justify-content: space-between;
         }
 
-        .input-row { display: flex; gap: 8px; }
-        .combo-box { display: flex; flex: 1.2; gap: 4px; }
+        .input-row { display: flex; gap: 6px; }
+        .combo-box { display: flex; flex: 1.2; gap: 3px; }
 
         input, select, button { 
-            width: 100%; height: 36px; font-size: 14px; 
+            width: 100%; height: 34px; font-size: 13px; 
             border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 8px;
         }
         input[readonly] { background-color: #f5f5f5; color: #666; }
 
         .select-quick {
-            width: 40px; min-width: 40px; padding: 0 2px; text-align: center;
+            width: 36px; min-width: 36px; padding: 0 2px; text-align: center;
             background-color: #f8f9fa; border-color: #ced4da; cursor: pointer;
         }
 
         .btn-send { 
             background-color: #2b8a3e; color: white; font-weight: bold; 
-            border: none; font-size: 15px; cursor: pointer; height: 38px;
+            border: none; font-size: 14px; cursor: pointer; height: 34px;
         }
         .btn-send:disabled { background-color: #82c91e; cursor: not-allowed; }
 
+        /* 초슬림 최근 전송 디스플레이 영역 */
         #last-sent-box {
-            padding: 6px 10px;
+            padding: 4px 8px;
             background-color: #f0fdf4;
             border: 1px solid #2b8a3e;
             border-radius: 6px;
-            font-size: 12px;
+            font-size: 11px;
             color: #222;
             display: none;
         }
@@ -96,11 +134,10 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2px;
         }
         .btn-resend {
-            background-color: #e03131; color: white; font-size: 11px; font-weight: bold;
-            border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; width: auto; height: auto;
+            background-color: #e03131; color: white; font-size: 10px; font-weight: bold;
+            border: none; border-radius: 3px; padding: 1px 5px; cursor: pointer; width: auto; height: auto;
         }
     </style>
     <!-- 카카오맵 JS SDK -->
@@ -151,16 +188,16 @@
             </div>
         </div>
 
-        <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요">
+        <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="height:28px; font-size:12px;">
         <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
 
-        <!-- 최근 전송/재전송 정보 박스 -->
+        <!-- 초슬림 최근 전송/재전송 정보 박스 -->
         <div id="last-sent-box">
             <div class="last-sent-header">
-                <strong id="status-title" style="color: #2b8a3e;">[노션 저장 완료]</strong>
-                <button class="btn-resend" onclick="resendToNotion()">↻ 다시 전송</button>
+                <strong id="status-title" style="color: #2b8a3e;">[저장 완료]</strong>
+                <span id="last-sent-info">-</span>
+                <button class="btn-resend" onclick="resendToNotion()">↻ 재전송</button>
             </div>
-            <span id="last-sent-info">-</span>
         </div>
     </div>
 
@@ -178,8 +215,8 @@
             };
             const map = new kakao.maps.Map(mapContainer, mapOptions);
 
-            let activeMarker = null; // 터치 시 생기는 입력용 임시 마커
-            let savedMarkers = [];  // 저장 완료된 영구 마커 배열
+            let activeMarker = null; // 터치 시 생기는 입력용 임시 핀 마커
+            let currentInfoWindow = null; // 오픈되어 있는 수목 정보 팝업
             let selectedCoords = null;
             let isZoomed = false;
 
@@ -192,7 +229,7 @@
             const webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1";
             let lastPayload = null;
 
-            // 1. 2배 확대 토글 버튼 이벤트
+            // 1. 2배 확대 토글 버튼
             zoomBtn.addEventListener("click", function() {
                 isZoomed = !isZoomed;
                 const currentCenter = map.getCenter();
@@ -239,7 +276,7 @@
                 }
             });
 
-            // 4. 지도 클릭 시 선택 마커 처리 (개선)
+            // 4. 지도 클릭 시 선택 마커 생성/이동
             mapContainer.addEventListener('click', function(e) {
                 if (isDragging) { isDragging = false; return; }
 
@@ -259,7 +296,6 @@
                 if (latlng) {
                     selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
                     
-                    // 기존 선택 마커가 없으면 생성, 있으면 위치 이동
                     if (!activeMarker) {
                         activeMarker = new kakao.maps.Marker({ 
                             position: latlng, 
@@ -272,11 +308,11 @@
                         }
                     }
 
-                    document.getElementById("coords").value = `위도: ${selectedCoords.lat.toFixed(6)}, 경도: ${selectedCoords.lng.toFixed(6)}`;
+                    document.getElementById("coords").value = `선택 좌표: ${selectedCoords.lat.toFixed(6)}, ${selectedCoords.lng.toFixed(6)}`;
                 }
             });
 
-            // 5. 노션 DB 전송 처리
+            // 5. 노션 DB 전송 함수
             window.sendToNotion = function() {
                 const treeId = document.getElementById('treeId').value;
                 const quantity = document.getElementById('quantity').value;
@@ -301,7 +337,7 @@
                 executeFetch(lastPayload);
             };
 
-            // 6. 서버 통신 및 마커 분리 관리 (핵심 수정)
+            // 6. 서버 전송 및 원번호(CustomOverlay) 마커 누적 생성
             function executeFetch(payload) {
                 const sendBtn = document.getElementById('sendBtn');
                 sendBtn.disabled = true;
@@ -320,14 +356,10 @@
                     if (data && data.status === "success") {
                         alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
                         
-                        // ① 전송 완료된 지점에 영구 저장 마커 생성하여 지도에 고정
-                        const savedMarker = new kakao.maps.Marker({
-                            position: new kakao.maps.LatLng(payload.lat, payload.lng),
-                            map: map
-                        });
-                        savedMarkers.push(savedMarker);
+                        // ① 전송 성공 위치에 가독성 높은 '원번호 커스텀 오버레이' 마커 생성
+                        createCircleNumberMarker(payload);
 
-                        // ② 선택용 임시 마커(activeMarker)를 지도에서 제거 후 null로 초기화
+                        // ② 선택용 임시 핀 마커 제거
                         if (activeMarker) {
                             activeMarker.setMap(null);
                             activeMarker = null;
@@ -335,7 +367,7 @@
 
                         updateDisplayBox(payload, true);
 
-                        // ③ 입력 폼 및 저장된 좌표 초기화
+                        // ③ 입력 폼 초기화
                         document.getElementById('treeId').value = '';
                         document.getElementById('quantity').value = '';
                         document.getElementById('species').value = '';
@@ -347,7 +379,7 @@
                     }
                 })
                 .catch(error => {
-                    alert('⚠️ [경고] 노션 저장에 실패했습니다!\n' + error.message + '\n하단의 [다시 전송] 버튼을 이용해 주세요.');
+                    alert('⚠️ [경고] 노션 저장에 실패했습니다!\n' + error.message + '\n하단의 [재전송] 버튼을 이용해 주세요.');
                     updateDisplayBox(payload, false);
                 })
                 .finally(() => {
@@ -356,35 +388,19 @@
                 });
             }
 
-            function updateDisplayBox(payload, isSuccess) {
-                const displayBox = document.getElementById('last-sent-box');
-                const statusTitle = document.getElementById('status-title');
-                const displayInfo = document.getElementById('last-sent-info');
+            // [원번호 마커 및 클릭시 정보 팝업 생성]
+            function createCircleNumberMarker(payload) {
+                const position = new kakao.maps.LatLng(payload.lat, payload.lng);
 
-                if (isSuccess) {
-                    displayBox.style.backgroundColor = '#f0fdf4';
-                    displayBox.style.borderColor = '#2b8a3e';
-                    statusTitle.style.color = '#2b8a3e';
-                    statusTitle.innerText = '[노션 저장 완료]';
-                } else {
-                    displayBox.style.backgroundColor = '#fff5f5';
-                    displayBox.style.borderColor = '#e03131';
-                    statusTitle.style.color = '#e03131';
-                    statusTitle.innerText = '[저장 실패 - 재전송 필요]';
-                }
+                // HTML 원번호 엘리먼트 생성
+                const content = document.createElement('div');
+                content.className = 'number-badge';
+                content.innerText = payload.tree_id;
 
-                displayInfo.innerHTML = `번호: <b>${payload.tree_id}</b> | 수종: <b>${payload.species || '-'}</b> | 주수: <b>${payload.quantity}</b> | 상태: <b>${payload.status || '-'}</b><br>좌표: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}`;
-                displayBox.style.display = 'block';
-            }
-
-            window.resendToNotion = function() {
-                if (!lastPayload) {
-                    alert('재전송할 최근 정보가 없습니다.');
-                    return;
-                }
-                executeFetch(lastPayload);
-            };
-        };
-    </script>
-</body>
-</html>
+                // 커스텀 오버레이 생성
+                const customOverlay = new kakao.maps.CustomOverlay({
+                    position: position,
+                    content: content,
+                    xAnchor: 0.5,
+                    yAnchor: 0.5,
+                    zIndex: 3
