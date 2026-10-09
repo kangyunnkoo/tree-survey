@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 현장 조사 - Pure Text Input</title>
-    <!-- 카카오 지도 API (발급받은 JavaScript 키로 교체) -->
+    <title>수목 현장 조사 - Realtime Input & Display</title>
+    <!-- 카카오 지도 API 적용 -->
     <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
     <style>
         body, html { 
@@ -29,6 +29,19 @@
             border: none; font-size: 16px; margin-top: 10px; cursor: pointer;
         }
         button:active { background-color: #237032; }
+
+        /* 방금 전 전송된 정보 표시 영역 (Display Field) */
+        #last-sent-box {
+            margin-top: 12px;
+            padding: 10px 12px;
+            background-color: #eeb00018;
+            border: 1px solid #2b8a3e;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #222;
+            display: none; /* 초기에는 숨김 */
+        }
+        #last-sent-box strong { color: #2b8a3e; }
     </style>
 </head>
 <body>
@@ -44,15 +57,18 @@
     </div>
 
     <div class="input-row">
-        <!-- 수종 순수 텍스트 입력창 (자동완성 제거) -->
         <input type="text" id="species" placeholder="수종 직접 입력" style="flex: 1.2;">
-
-        <!-- 상태 순수 텍스트 입력창 (자동완성 제거) -->
         <input type="text" id="status" placeholder="상태 직접 입력" style="flex: 1;">
     </div>
 
     <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="margin-top: 8px;">
     <button onclick="sendToNotion()">노션 DB로 전송</button>
+
+    <!-- 방금 저장된 정보를 보여주는 Display Field -->
+    <div id="last-sent-box">
+        <strong>[최근 전송 완료]</strong><br>
+        <span id="last-sent-info">-</span>
+    </div>
 </div>
 
 <script>
@@ -93,7 +109,7 @@
         document.getElementById('coords').value = currentLat.toFixed(6) + ', ' + currentLng.toFixed(6);
     });
 
-    // 4. Make.com Webhook으로 데이터 전송
+    // 4. Make.com Webhook으로 데이터 전송 및 Display Field 업데이트
     function sendToNotion() {
         var treeId = document.getElementById('treeId').value;
         var quantity = document.getElementById('quantity').value;
@@ -107,23 +123,39 @@
 
         var webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1"; 
 
+        var payload = {
+            master_id: masterId,
+            tree_id: treeId,
+            quantity: quantity ? parseInt(quantity) : 1,
+            species: species,
+            status: status,
+            lat: currentLat,
+            lng: currentLng
+        };
+
         fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                master_id: masterId,
-                tree_id: treeId,
-                quantity: quantity ? parseInt(quantity) : 1,
-                species: species,
-                status: status,
-                lat: currentLat,
-                lng: currentLng
-            })
+            body: JSON.stringify(payload)
         })
         .then(response => {
             alert('노션 DB 전송 완료!');
-            // 다음 입력을 위해 번호 필드 초기화
+
+            // 최근 전송된 정보 Display Field 업데이트
+            var displayBox = document.getElementById('last-sent-box');
+            var displayInfo = document.getElementById('last-sent-info');
+            
+            displayInfo.innerHTML = `번호: <b>${treeId}</b> | 수종: <b>${species || '-'}</b> | 주수: <b>${quantity || 1}</b> | 상태: <b>${status || '-'}</b><br>좌표: ${currentLat.toFixed(6)}, ${currentLng.toFixed(6)}`;
+            displayBox.style.display = 'block';
+
+            // 입력 폼 초기화
             document.getElementById('treeId').value = '';
+            document.getElementById('quantity').value = '';
+            document.getElementById('species').value = '';
+            document.getElementById('status').value = '';
+            document.getElementById('coords').value = '';
+            currentLat = null;
+            currentLng = null;
         })
         .catch(error => {
             alert('전송 중 오류 발생: ' + error);
