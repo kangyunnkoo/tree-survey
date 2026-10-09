@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 현장 조사 - 자동 관계형 매칭</title>
+    <title>수목 현장 조사 - Pure Text Input</title>
     <!-- 카카오 지도 API (발급받은 JavaScript 키로 교체) -->
     <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
     <style>
@@ -13,19 +13,20 @@
         }
         #map { width: 100%; height: 100%; }
         #info-box {
-            position: absolute; bottom: 20px; left: 5%; width: 90%;
+            position: absolute; bottom: 15px; left: 5%; width: 90%;
             background: rgba(255, 255, 255, 0.95); padding: 16px; box-sizing: border-box;
             border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.25); z-index: 10;
         }
         .title { font-size: 16px; font-weight: bold; color: #222; margin-bottom: 8px; display: block; }
+        .input-row { display: flex; gap: 8px; margin-top: 8px; }
         input, button { 
-            width: 100%; height: 42px; margin-top: 8px; font-size: 15px; 
-            border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 12px;
+            width: 100%; height: 42px; font-size: 15px; 
+            border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 10px;
         }
         input[readonly] { background-color: #f5f5f5; color: #666; }
         button { 
             background-color: #2b8a3e; color: white; font-weight: bold; 
-            border: none; font-size: 16px; margin-top: 12px; cursor: pointer;
+            border: none; font-size: 16px; margin-top: 10px; cursor: pointer;
         }
         button:active { background-color: #237032; }
     </style>
@@ -36,9 +37,21 @@
 
 <div id="info-box">
     <span class="title">🌳 수목 위치 선택 및 정보 입력</span>
-    <input type="text" id="treeId" placeholder="수목 번호 (예: 101)">
-    <input type="text" id="status" placeholder="상태/수종 (예: 철쭉류 50주)">
-    <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요">
+    
+    <div class="input-row">
+        <input type="text" id="treeId" placeholder="번호 (예: 101)" style="flex: 1;">
+        <input type="number" id="quantity" placeholder="주수 (예: 50)" style="flex: 1;">
+    </div>
+
+    <div class="input-row">
+        <!-- 수종 순수 텍스트 입력창 (자동완성 제거) -->
+        <input type="text" id="species" placeholder="수종 직접 입력" style="flex: 1.2;">
+
+        <!-- 상태 순수 텍스트 입력창 (자동완성 제거) -->
+        <input type="text" id="status" placeholder="상태 직접 입력" style="flex: 1;">
+    </div>
+
+    <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="margin-top: 8px;">
     <button onclick="sendToNotion()">노션 DB로 전송</button>
 </div>
 
@@ -53,17 +66,16 @@
     }
 
     var params = getUrlParams();
-    var masterId = params.master_id || ""; // Master DB 페이지 ID
+    var masterId = params.master_id || ""; 
     
-    // 기본 중심 좌표 (파라미터가 없을 경우 기본 좌표)
     var defaultLat = params.lat ? parseFloat(params.lat) : 37.5794;
     var defaultLng = params.lng ? parseFloat(params.lng) : 126.9033;
 
-    // 2. 카카오 지도 생성 및 파라미터 중심 위치로 이동
+    // 2. 카카오 지도 생성
     var container = document.getElementById('map');
     var options = { 
         center: new kakao.maps.LatLng(defaultLat, defaultLng), 
-        level: 2 // 현장 수목 식별에 적합한 확대 레벨
+        level: 2 
     };
     var map = new kakao.maps.Map(container, options);
 
@@ -71,22 +83,21 @@
     var currentLng = null;
     var marker = new kakao.maps.Marker({ map: map });
 
-    // 3. 지도 터치/클릭 이벤트 - 선택 위치 좌표 추출 및 마커 표시
+    // 3. 지도 터치/클릭 이벤트
     kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
         var latLng = mouseEvent.latLng;
         currentLat = latLng.getLat();
         currentLng = latLng.getLng();
 
-        // 선택 위치로 마커 이동
         marker.setPosition(latLng);
-
-        // 입력창에 좌표 표시
         document.getElementById('coords').value = currentLat.toFixed(6) + ', ' + currentLng.toFixed(6);
     });
 
-    // 4. Make.com Webhook으로 전달 (Notion DB 전송 및 관계형 자동 연결)
+    // 4. Make.com Webhook으로 데이터 전송
     function sendToNotion() {
         var treeId = document.getElementById('treeId').value;
+        var quantity = document.getElementById('quantity').value;
+        var species = document.getElementById('species').value;
         var status = document.getElementById('status').value;
 
         if (!currentLat || !treeId) {
@@ -94,15 +105,16 @@
             return;
         }
 
-        // Make.com에서 생성한 Webhook URL 입력
         var webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1"; 
 
         fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                master_id: masterId, // Master DB와 자동 매칭되는 Page ID
+                master_id: masterId,
                 tree_id: treeId,
+                quantity: quantity ? parseInt(quantity) : 1,
+                species: species,
                 status: status,
                 lat: currentLat,
                 lng: currentLng
@@ -110,9 +122,8 @@
         })
         .then(response => {
             alert('노션 DB 전송 완료!');
-            // 입력 폼 초기화 (연속 입력을 위해 위치 정보 및 상태 일부 유지 가능)
+            // 다음 입력을 위해 번호 필드 초기화
             document.getElementById('treeId').value = '';
-            document.getElementById('status').value = '';
         })
         .catch(error => {
             alert('전송 중 오류 발생: ' + error);
