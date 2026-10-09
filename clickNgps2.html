@@ -14,7 +14,6 @@
             position: relative;
         }
 
-        /* left top 기준으로 확대하여 좌표 오차 제거 */
         #map {
             width: 100%;
             height: 100%;
@@ -28,7 +27,6 @@
             transform: scale(2);
         }
 
-        /* 화면 맨 왼쪽 위 2배 확대 버튼 */
         #zoom-toggle-btn {
             position: absolute;
             top: 12px;
@@ -52,7 +50,6 @@
             border-color: #0056b3;
         }
 
-        /* 하단 수목 정보 입력 패널 */
         #panel {
             height: 28%;
             padding: 12px;
@@ -86,7 +83,6 @@
         }
         .btn-send:disabled { background-color: #82c91e; cursor: not-allowed; }
 
-        /* 최근 전송 디스플레이 영역 */
         #last-sent-box {
             padding: 6px 10px;
             background-color: #f0fdf4;
@@ -182,8 +178,8 @@
             };
             const map = new kakao.maps.Map(mapContainer, mapOptions);
 
-            let activeMarker = null; // 터치 시 생기는 임시 선택 마커
-            let savedMarkers = [];  // 저장 완료된 영구 마커 모음
+            let activeMarker = null; // 터치 시 생기는 입력용 임시 마커
+            let savedMarkers = [];  // 저장 완료된 영구 마커 배열
             let selectedCoords = null;
             let isZoomed = false;
 
@@ -225,7 +221,7 @@
                 }
             };
 
-            // 3. 드래그 판단 이벤트 (마우스 & 터치)
+            // 3. 드래그 판단 이벤트
             mapContainer.addEventListener('mousedown', function(e) {
                 isDragging = false; startX = e.clientX; startY = e.clientY;
             });
@@ -243,7 +239,7 @@
                 }
             });
 
-            // 4. 지도 클릭 시 좌표 변환 및 선택 마커 처리 (드래그 시 무시)
+            // 4. 지도 클릭 시 선택 마커 처리 (개선)
             mapContainer.addEventListener('click', function(e) {
                 if (isDragging) { isDragging = false; return; }
 
@@ -263,11 +259,17 @@
                 if (latlng) {
                     selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
                     
+                    // 기존 선택 마커가 없으면 생성, 있으면 위치 이동
                     if (!activeMarker) {
-                        activeMarker = new kakao.maps.Marker({ position: latlng, map: map });
+                        activeMarker = new kakao.maps.Marker({ 
+                            position: latlng, 
+                            map: map 
+                        });
                     } else {
                         activeMarker.setPosition(latlng);
-                        activeMarker.setMap(map);
+                        if (!activeMarker.getMap()) {
+                            activeMarker.setMap(map);
+                        }
                     }
 
                     document.getElementById("coords").value = `위도: ${selectedCoords.lat.toFixed(6)}, 경도: ${selectedCoords.lng.toFixed(6)}`;
@@ -299,7 +301,7 @@
                 executeFetch(lastPayload);
             };
 
-            // 6. 서버 통신 및 검증
+            // 6. 서버 통신 및 마커 분리 관리 (핵심 수정)
             function executeFetch(payload) {
                 const sendBtn = document.getElementById('sendBtn');
                 sendBtn.disabled = true;
@@ -318,14 +320,14 @@
                     if (data && data.status === "success") {
                         alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
                         
-                        // 영구 저장 마커 추가
+                        // ① 전송 완료된 지점에 영구 저장 마커 생성하여 지도에 고정
                         const savedMarker = new kakao.maps.Marker({
                             position: new kakao.maps.LatLng(payload.lat, payload.lng),
                             map: map
                         });
                         savedMarkers.push(savedMarker);
 
-                        // 선택 임시 마커 제거
+                        // ② 선택용 임시 마커(activeMarker)를 지도에서 제거 후 null로 초기화
                         if (activeMarker) {
                             activeMarker.setMap(null);
                             activeMarker = null;
@@ -333,7 +335,7 @@
 
                         updateDisplayBox(payload, true);
 
-                        // 입력 폼 초기화
+                        // ③ 입력 폼 및 저장된 좌표 초기화
                         document.getElementById('treeId').value = '';
                         document.getElementById('quantity').value = '';
                         document.getElementById('species').value = '';
