@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 현장 조사 - Realtime Input & Display</title>
-    <!-- 카카오 지도 API 적용 -->
+    <title>수목 현장 조사 - 재전송 기능 포함</title>
+    <!-- 카카오 지도 API -->
     <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
     <style>
         body, html { 
@@ -24,24 +24,42 @@
             border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 10px;
         }
         input[readonly] { background-color: #f5f5f5; color: #666; }
-        button { 
+        .btn-send { 
             background-color: #2b8a3e; color: white; font-weight: bold; 
             border: none; font-size: 16px; margin-top: 10px; cursor: pointer;
         }
-        button:active { background-color: #237032; }
+        .btn-send:active { background-color: #237032; }
 
-        /* 방금 전 전송된 정보 표시 영역 (Display Field) */
+        /* 최근 전송 정보 디스플레이 및 재전송 영역 */
         #last-sent-box {
             margin-top: 12px;
             padding: 10px 12px;
-            background-color: #eeb00018;
+            background-color: #f0fdf4;
             border: 1px solid #2b8a3e;
             border-radius: 8px;
             font-size: 13px;
             color: #222;
-            display: none; /* 초기에는 숨김 */
+            display: none; /* 초기 숨김 */
         }
-        #last-sent-box strong { color: #2b8a3e; }
+        .last-sent-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .btn-resend {
+            background-color: #e03131;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            width: auto;
+            height: auto;
+            cursor: pointer;
+        }
+        .btn-resend:active { background-color: #c92a2a; }
     </style>
 </head>
 <body>
@@ -62,11 +80,14 @@
     </div>
 
     <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="margin-top: 8px;">
-    <button onclick="sendToNotion()">노션 DB로 전송</button>
+    <button class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
 
-    <!-- 방금 저장된 정보를 보여주는 Display Field -->
+    <!-- 최근 전송 정보 및 재전송 박스 -->
     <div id="last-sent-box">
-        <strong>[최근 전송 완료]</strong><br>
+        <div class="last-sent-header">
+            <strong style="color: #2b8a3e;">[최근 전송/시도 정보]</strong>
+            <button class="btn-resend" onclick="resendToNotion()">↻ 다시 전송</button>
+        </div>
         <span id="last-sent-info">-</span>
     </div>
 </div>
@@ -99,6 +120,10 @@
     var currentLng = null;
     var marker = new kakao.maps.Marker({ map: map });
 
+    // 재전송을 위한 최근 payload 임시 저장 변수
+    var lastPayload = null;
+    var webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1";
+
     // 3. 지도 터치/클릭 이벤트
     kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
         var latLng = mouseEvent.latLng;
@@ -109,7 +134,7 @@
         document.getElementById('coords').value = currentLat.toFixed(6) + ', ' + currentLng.toFixed(6);
     });
 
-    // 4. Make.com Webhook으로 데이터 전송 및 Display Field 업데이트
+    // 4. 노션 전송 메인 함수
     function sendToNotion() {
         var treeId = document.getElementById('treeId').value;
         var quantity = document.getElementById('quantity').value;
@@ -121,9 +146,8 @@
             return;
         }
 
-        var webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1"; 
-
-        var payload = {
+        // 전송 데이터 생성 및 최근 저장용 변수에 보관
+        lastPayload = {
             master_id: masterId,
             tree_id: treeId,
             quantity: quantity ? parseInt(quantity) : 1,
@@ -133,6 +157,11 @@
             lng: currentLng
         };
 
+        executeFetch(lastPayload);
+    }
+
+    // 5. 서버 통신 처리 공통 함수
+    function executeFetch(payload) {
         fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -141,11 +170,11 @@
         .then(response => {
             alert('노션 DB 전송 완료!');
 
-            // 최근 전송된 정보 Display Field 업데이트
+            // Display Field 업데이트
             var displayBox = document.getElementById('last-sent-box');
             var displayInfo = document.getElementById('last-sent-info');
             
-            displayInfo.innerHTML = `번호: <b>${treeId}</b> | 수종: <b>${species || '-'}</b> | 주수: <b>${quantity || 1}</b> | 상태: <b>${status || '-'}</b><br>좌표: ${currentLat.toFixed(6)}, ${currentLng.toFixed(6)}`;
+            displayInfo.innerHTML = `번호: <b>${payload.tree_id}</b> | 수종: <b>${payload.species || '-'}</b> | 주수: <b>${payload.quantity}</b> | 상태: <b>${payload.status || '-'}</b><br>좌표: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}`;
             displayBox.style.display = 'block';
 
             // 입력 폼 초기화
@@ -158,8 +187,19 @@
             currentLng = null;
         })
         .catch(error => {
-            alert('전송 중 오류 발생: ' + error);
+            alert('전송 중 오류가 발생했습니다: ' + error);
         });
+    }
+
+    // 6. [다시 전송] 버튼 클릭 이벤트
+    function resendToNotion() {
+        if (!lastPayload) {
+            alert('재전송할 최근 정보가 없습니다.');
+            return;
+        }
+        if (confirm(`[번호: ${lastPayload.tree_id}] 정보를 노션으로 다시 전송하시겠습니까?`)) {
+            executeFetch(lastPayload);
+        }
     }
 </script>
 </body>
