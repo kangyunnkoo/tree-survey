@@ -50,25 +50,25 @@
             border-color: #0056b3;
         }
 
-        /* 원번호 마커 커스텀 오버레이 스타일 */
+        /* 1/2로 축소된 원번호 마커 커스텀 오버레이 (14px x 14px) */
         .number-badge {
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
+            width: 14px;
+            height: 14px;
             background-color: #2b8a3e;
             color: #ffffff;
-            font-size: 13px;
+            font-size: 9px;
             font-weight: bold;
             border-radius: 50%;
-            border: 2px solid #ffffff;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            border: 1.5px solid #ffffff;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.4);
             cursor: pointer;
             user-select: none;
-            transition: transform 0.1s ease;
+            line-height: 1;
         }
-        .number-badge:active { transform: scale(1.15); }
+        .number-badge:active { transform: scale(1.2); }
 
         /* 수목 정보 팝업(InfoWindow) 스타일 */
         .info-pop {
@@ -138,7 +138,7 @@
             border: none; border-radius: 3px; padding: 1px 5px; cursor: pointer; width: auto; height: auto;
         }
     </style>
-    <!-- 카카오맵 JS SDK (autoload=false 적용으로 로딩 보장) -->
+    <!-- 카카오맵 JS SDK (autoload=false 적용) -->
     <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6&autoload=false"></script>
 </head>
 <body>
@@ -200,7 +200,6 @@
     </div>
 
     <script>
-        // 카카오 지도 SDK 안정적 로드 보장
         kakao.maps.load(function() {
             const params = new URLSearchParams(window.location.search);
             const masterId = params.get("master_id") || "";
@@ -214,8 +213,8 @@
             };
             const map = new kakao.maps.Map(mapContainer, mapOptions);
 
-            let activeMarker = null; // 터치 시 생기는 임시 핀 마커
-            let currentInfoWindow = null; // 오픈되어 있는 수목 정보 팝업
+            let activeMarker = null; // 선택 위치용 임시 핀 마커
+            let currentInfoWindow = null; // 활성화된 수목 정보 팝업
             let selectedCoords = null;
             let isZoomed = false;
 
@@ -274,7 +273,7 @@
                 }
             });
 
-            // 4. 지도 안전 클릭 이벤트 (카카오 API 공식 latLng 추출 방식)
+            // 4. 지도 클릭 이벤트 (위치 선택)
             kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
                 if (isDragging) { isDragging = false; return; }
 
@@ -321,7 +320,7 @@
                 executeFetch(lastPayload);
             };
 
-            // 6. 서버 전송 및 원번호(CustomOverlay) 마커 누적 생성
+            // 6. 서버 전송 및 원번호 오버레이 생성
             function executeFetch(payload) {
                 const sendBtn = document.getElementById('sendBtn');
                 sendBtn.disabled = true;
@@ -340,7 +339,7 @@
                     if (data && data.status === "success") {
                         alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
                         
-                        // ① 전송 성공 위치에 '원번호 커스텀 오버레이' 마커 생성
+                        // ① 축소된 원번호 마커 생성 (이벤트 상쇄 적용)
                         createCircleNumberMarker(payload);
 
                         // ② 선택용 임시 핀 마커 제거
@@ -372,7 +371,7 @@
                 });
             }
 
-            // 원번호 마커 및 클릭 시 팝업 창
+            // 원번호 커스텀 오버레이 및 지도 클릭 이벤트 상쇄 처리
             function createCircleNumberMarker(payload) {
                 const position = new kakao.maps.LatLng(payload.lat, payload.lng);
 
@@ -404,13 +403,26 @@
                     removable: true
                 });
 
-                content.addEventListener('click', function(e) {
+                // 지도 클릭으로 이벤트가 전파되지 않도록 차단하는 핵심 핸들러
+                function handleOverlayClick(e) {
+                    if (e) {
+                        if (e.stopPropagation) e.stopPropagation();
+                        if (e.preventDefault) e.preventDefault();
+                    }
+                    kakao.maps.event.preventMap(); // 카카오맵 지도 클릭 이벤트 방지
+
                     if (currentInfoWindow) {
                         currentInfoWindow.close();
                     }
                     infowindow.open(map, customOverlay);
                     currentInfoWindow = infowindow;
-                });
+                }
+
+                // PC 마우스 및 모바일 터치 이벤트에 전파 방지 등록
+                content.addEventListener('click', handleOverlayClick);
+                content.addEventListener('touchend', handleOverlayClick);
+                content.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+                content.addEventListener('touchstart', function(e) { e.stopPropagation(); });
             }
 
             function updateDisplayBox(payload, isSuccess) {
