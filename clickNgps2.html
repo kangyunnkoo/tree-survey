@@ -50,7 +50,7 @@
             border-color: #0056b3;
         }
 
-        /* 1/2로 축소된 원번호 마커 커스텀 오버레이 (14px x 14px) */
+        /* 1/2 축소 원번호 마커 커스텀 오버레이 (14px x 14px) */
         .number-badge {
             display: flex;
             align-items: center;
@@ -255,7 +255,7 @@
                 }
             };
 
-            // 3. 드래그 판단 이벤트 (마우스/터치)
+            // 3. 드래그 판단 이벤트
             mapWrapper.addEventListener('mousedown', function(e) {
                 isDragging = false; startX = e.clientX; startY = e.clientY;
             });
@@ -273,26 +273,43 @@
                 }
             });
 
-            // 4. 지도 클릭 이벤트 (위치 선택)
-            kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
+            // 4. 지도 클릭 시 좌표 정밀 변환 처리 (2배 확대 오차 해결)
+            mapContainer.addEventListener('click', function(e) {
                 if (isDragging) { isDragging = false; return; }
 
-                const latLng = mouseEvent.latLng;
-                selectedCoords = { lat: latLng.getLat(), lng: latLng.getLng() };
+                const rect = mapContainer.getBoundingClientRect();
+                let clickX = e.clientX - rect.left;
+                let clickY = e.clientY - rect.top;
 
-                if (!activeMarker) {
-                    activeMarker = new kakao.maps.Marker({ 
-                        position: latLng, 
-                        map: map 
-                    });
-                } else {
-                    activeMarker.setPosition(latLng);
-                    if (!activeMarker.getMap()) {
-                        activeMarker.setMap(map);
-                    }
+                // 2배 확대 시 좌표 절반 보정
+                if (isZoomed) {
+                    clickX = clickX / 2;
+                    clickY = clickY / 2;
                 }
 
-                document.getElementById("coords").value = `선택 좌표: ${selectedCoords.lat.toFixed(6)}, ${selectedCoords.lng.toFixed(6)}`;
+                const projection = map.getProjection();
+                if (!projection) return;
+
+                const point = new kakao.maps.Point(clickX, clickY);
+                const latlng = projection.coordsFromContainerPoint(point);
+
+                if (latlng) {
+                    selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
+                    
+                    if (!activeMarker) {
+                        activeMarker = new kakao.maps.Marker({ 
+                            position: latlng, 
+                            map: map 
+                        });
+                    } else {
+                        activeMarker.setPosition(latlng);
+                        if (!activeMarker.getMap()) {
+                            activeMarker.setMap(map);
+                        }
+                    }
+
+                    document.getElementById("coords").value = `선택 좌표: ${selectedCoords.lat.toFixed(6)}, ${selectedCoords.lng.toFixed(6)}`;
+                }
             });
 
             // 5. 노션 DB 전송 함수
@@ -403,13 +420,12 @@
                     removable: true
                 });
 
-                // 지도 클릭으로 이벤트가 전파되지 않도록 차단하는 핵심 핸들러
+                // 원번호 클릭 시 지도 클릭 이벤트 전파 완전 차단
                 function handleOverlayClick(e) {
                     if (e) {
                         if (e.stopPropagation) e.stopPropagation();
                         if (e.preventDefault) e.preventDefault();
                     }
-                    kakao.maps.event.preventMap(); // 카카오맵 지도 클릭 이벤트 방지
 
                     if (currentInfoWindow) {
                         currentInfoWindow.close();
@@ -418,7 +434,6 @@
                     currentInfoWindow = infowindow;
                 }
 
-                // PC 마우스 및 모바일 터치 이벤트에 전파 방지 등록
                 content.addEventListener('click', handleOverlayClick);
                 content.addEventListener('touchend', handleOverlayClick);
                 content.addEventListener('mousedown', function(e) { e.stopPropagation(); });
