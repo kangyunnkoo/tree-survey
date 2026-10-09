@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 위치 선택 및 노션 DB 전송 (2배 확대 보정)</title>
+    <title>수목 위치 선택 및 노션 DB 전송 (목록 정렬 적용)</title>
     <style>
         html, body { margin:0; padding:0; height:100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         
@@ -117,29 +117,29 @@
     </div>
     
     <div id="panel">
-        <!-- 1행: 번호 + 수종(입력창 + 퀵선택) -->
+        <!-- 1행: 번호 + 수종(입력창 + 가나다순 퀵선택) -->
         <div class="input-row">
             <input type="text" id="treeId" placeholder="번호 (예: 101)" style="flex: 0.8;">
             <div class="combo-box">
                 <input type="text" id="species" placeholder="수종 직접 입력">
                 <select class="select-quick" onchange="applyQuickValue('species', this)">
                     <option value="">▼</option>
-                    <option value="철쭉류">철쭉류</option>
-                    <option value="왕벚나무">왕벚나무</option>
+                    <option value="배롱나무">배롱나무</option>
                     <option value="벚나무류">벚나무류</option>
-                    <option value="팽나무">팽나무</option>
+                    <option value="산딸나무">산딸나무</option>
+                    <option value="산수유">산수유</option>
                     <option value="소나무(반송)">소나무(반송)</option>
                     <option value="소나무(장송)">소나무(장송)</option>
-                    <option value="노랑말채나무">노랑말채나무</option>
-                    <option value="흰말채나무">흰말채나무</option>
+                    <option value="왕벚나무">왕벚나무</option>
+                    <option value="전나무">전나무</option>
+                    <option value="철쭉류">철쭉류</option>
+                    <option value="팽나무">팽나무</option>
                     <option value="회양목">회양목</option>
-                    <option value="병꽃나무">병꽃나무</option>
-                    <option value="(개)쉬땅나무">(개)쉬땅나무</option>
                 </select>
             </div>
         </div>
 
-        <!-- 2행: 주수 + 상태(입력창 + 퀵선택) -->
+        <!-- 2행: 주수 + 상태(입력창 + 지정순 퀵선택) -->
         <div class="input-row">
             <input type="number" id="quantity" placeholder="주수 (예: 1)" style="flex: 0.8;">
             <div class="combo-box">
@@ -147,11 +147,10 @@
                 <select class="select-quick" onchange="applyQuickValue('status', this)">
                     <option value="">▼</option>
                     <option value="고사">고사</option>
-                    <option value="수간부후">수간부후</option>
-                    <option value="가지부후">가지부후</option>
+                    <option value="수간부후()">수간부후()</option>
+                    <option value="가지고사()">가지고사()</option>
+                    <option value="심식">심식</option>
                     <option value="수세위약">수세위약</option>
-                    <option value="고사목">고사목</option>
-                    <option value="생육양호">생육양호</option>
                 </select>
             </div>
         </div>
