@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 위치 선택</title>
+    <title>수목 위치 선택 및 노션 DB 전송</title>
     <style>
         html, body { margin:0; padding:0; height:100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         
@@ -382,9 +382,6 @@
                 }
                 executeFetch(lastPayload);
             };
-
-            const mapTypeControl = new kakao.maps.MapTypeControl();
-            map.addControl(mapTypeControl, kakao.maps.ControlPosition.TOPRIGHT);
         };
     </script>
 </body>
