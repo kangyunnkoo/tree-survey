@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 현장 조사 - 마커 관리 및 선택 입력 개선</title>
+    <title>수목 현장 조사 - 초슬림 입력폼</title>
     <!-- 카카오 지도 API -->
     <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
     <style>
@@ -14,44 +14,39 @@
         #map { width: 100%; height: 100%; }
         #info-box {
             position: absolute; bottom: 15px; left: 5%; width: 90%;
-            background: rgba(255, 255, 255, 0.96); padding: 16px; box-sizing: border-box;
+            background: rgba(255, 255, 255, 0.96); padding: 14px; box-sizing: border-box;
             border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.25); z-index: 10;
-            max-height: 85vh; overflow-y: auto;
         }
-        .title { font-size: 16px; font-weight: bold; color: #222; margin-bottom: 8px; display: block; }
-        .input-row { display: flex; gap: 8px; margin-top: 8px; }
-        .input-group { flex: 1; display: flex; flex-direction: column; }
-        input, button { 
-            width: 100%; height: 40px; font-size: 15px; 
-            border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 10px;
+        .title { font-size: 15px; font-weight: bold; color: #222; margin-bottom: 6px; display: block; }
+        .input-row { display: flex; gap: 8px; margin-top: 6px; }
+        .combo-box { display: flex; flex: 1.2; gap: 4px; }
+        
+        input, select, button { 
+            width: 100%; height: 38px; font-size: 14px; 
+            border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 8px;
         }
         input[readonly] { background-color: #f5f5f5; color: #666; }
         
-        /* 자주 쓰는 항목 추천 칩(Chip) 스타일 */
-        .chip-container {
-            display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;
+        /* 선택용 드롭다운 스타일 (크기를 최소화하여 입력창 옆에 배치) */
+        .select-quick {
+            width: 42px; min-width: 42px; padding: 0 2px; text-align: center;
+            background-color: #f8f9fa; border-color: #ced4da; cursor: pointer;
         }
-        .chip {
-            background-color: #e9ecef; color: #495057; font-size: 11px;
-            padding: 3px 8px; border-radius: 12px; cursor: pointer;
-            border: 1px solid #ced4da; font-weight: 500;
-        }
-        .chip:active { background-color: #2b8a3e; color: white; }
 
         .btn-send { 
             background-color: #2b8a3e; color: white; font-weight: bold; 
-            border: none; font-size: 16px; margin-top: 10px; cursor: pointer;
+            border: none; font-size: 15px; margin-top: 8px; cursor: pointer; height: 40px;
         }
         .btn-send:disabled { background-color: #82c91e; cursor: not-allowed; }
 
-        /* 최근 전송 정보 디스플레이 박스 */
+        /* 최근 전송 디스플레이 영역 */
         #last-sent-box {
-            margin-top: 10px;
-            padding: 10px 12px;
+            margin-top: 8px;
+            padding: 8px 10px;
             background-color: #f0fdf4;
             border: 1px solid #2b8a3e;
-            border-radius: 8px;
-            font-size: 13px;
+            border-radius: 6px;
+            font-size: 12px;
             color: #222;
             display: none;
         }
@@ -59,19 +54,11 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         .btn-resend {
-            background-color: #e03131;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-            border: none;
-            border-radius: 4px;
-            padding: 4px 8px;
-            width: auto;
-            height: auto;
-            cursor: pointer;
+            background-color: #e03131; color: white; font-size: 11px; font-weight: bold;
+            border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; width: auto; height: auto;
         }
     </style>
 </head>
@@ -82,40 +69,48 @@
 <div id="info-box">
     <span class="title">🌳 수목 위치 선택 및 정보 입력</span>
     
-    <!-- 1행: 번호 + 수종 -->
+    <!-- 1행: 번호 + 수종(입력창 + 퀵선택) -->
     <div class="input-row">
-        <div class="input-group" style="flex: 0.8;">
-            <input type="text" id="treeId" placeholder="번호 (예: 101)">
-        </div>
-        <div class="input-group" style="flex: 1.2;">
+        <input type="text" id="treeId" placeholder="번호 (예: 101)" style="flex: 0.8;">
+        
+        <div class="combo-box">
             <input type="text" id="species" placeholder="수종 직접 입력">
-            <div class="chip-container">
-                <span class="chip" onclick="setFieldValue('species', '왕벚나무')">왕벚나무</span>
-                <span class="chip" onclick="setFieldValue('species', '벚나무류')">벚나무류</span>
-                <span class="chip" onclick="setFieldValue('species', '팽나무')">팽나무</span>
-                <span class="chip" onclick="setFieldValue('species', '소나무(반송)')">소나무(반송)</span>
-                <span class="chip" onclick="setFieldValue('species', '소나무(장송)')">소나무(장송)</span>
-            </div>
+            <select class="select-quick" onchange="applyQuickValue('species', this)">
+                <option value="">▼</option>
+                <option value="철쭉류">철쭉류</option>
+                <option value="왕벚나무">왕벚나무</option>
+                <option value="벚나무류">벚나무류</option>
+                <option value="팽나무">팽나무</option>
+                <option value="소나무(반송)">소나무(반송)</option>
+                <option value="소나무(장송)">소나무(장송)</option>
+                <option value="노랑말채나무">노랑말채나무</option>
+                <option value="흰말채나무">흰말채나무</option>
+                <option value="회양목">회양목</option>
+                <option value="병꽃나무">병꽃나무</option>
+                <option value="(개)쉬땅나무">(개)쉬땅나무</option>
+            </select>
         </div>
     </div>
 
-    <!-- 2행: 주수 + 상태 -->
+    <!-- 2행: 주수 + 상태(입력창 + 퀵선택) -->
     <div class="input-row">
-        <div class="input-group" style="flex: 0.8;">
-            <input type="number" id="quantity" placeholder="주수 (예: 1)">
-        </div>
-        <div class="input-group" style="flex: 1.2;">
+        <input type="number" id="quantity" placeholder="주수 (예: 1)" style="flex: 0.8;">
+        
+        <div class="combo-box">
             <input type="text" id="status" placeholder="상태 직접 입력">
-            <div class="chip-container">
-                <span class="chip" onclick="setFieldValue('status', '고사')">고사</span>
-                <span class="chip" onclick="setFieldValue('status', '수간부후')">수간부후</span>
-                <span class="chip" onclick="setFieldValue('status', '가지부후')">가지부후</span>
-                <span class="chip" onclick="setFieldValue('status', '수세위약')">수세위약</span>
-            </div>
+            <select class="select-quick" onchange="applyQuickValue('status', this)">
+                <option value="">▼</option>
+                <option value="고사">고사</option>
+                <option value="수간부후">수간부후</option>
+                <option value="가지부후">가지부후</option>
+                <option value="수세위약">수세위약</option>
+                <option value="고사목">고사목</option>
+                <option value="생육양호">생육양호</option>
+            </select>
         </div>
     </div>
 
-    <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="margin-top: 8px;">
+    <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="margin-top: 6px;">
     <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
 
     <!-- 최근 전송/재전송 정보 박스 -->
@@ -149,16 +144,18 @@
     var currentLat = null;
     var currentLng = null;
 
-    // 마커 변수 분리
-    var activeMarker = null; // 현재 선택 입력 중인 임시 마커
-    var savedMarkers = [];  // 전송 완료된 마커 모음
+    var activeMarker = null; // 터치 시 생기는 임시 마커
+    var savedMarkers = [];  // 저장 완료 마커 모음
 
     var lastPayload = null;
     var webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1";
 
-    // 자주 쓰는 항목 클릭 시 입력창에 값 입력 함수
-    function setFieldValue(fieldId, value) {
-        document.getElementById(fieldId).value = value;
+    // 드롭다운(▼) 선택 시 input 박스로 값 복사
+    function applyQuickValue(fieldId, selectObj) {
+        if (selectObj.value) {
+            document.getElementById(fieldId).value = selectObj.value;
+            selectObj.value = ""; // 선택 후 드롭다운은 다시 '▼'로 초기화
+        }
     }
 
     // 지도 터치 이벤트
@@ -167,7 +164,6 @@
         currentLat = latLng.getLat();
         currentLng = latLng.getLng();
 
-        // 기존 클릭 마커가 없으면 새로 생성, 있으면 위치 이동
         if (!activeMarker) {
             activeMarker = new kakao.maps.Marker({
                 position: latLng,
@@ -175,7 +171,7 @@
             });
         } else {
             activeMarker.setPosition(latLng);
-            activeMarker.setMap(map); // 화면에 다시 표시
+            activeMarker.setMap(map);
         }
 
         document.getElementById('coords').value = currentLat.toFixed(6) + ', ' + currentLng.toFixed(6);
@@ -205,7 +201,6 @@
         executeFetch(lastPayload);
     }
 
-    // 서버 전송 및 검증 처리 함수
     function executeFetch(payload) {
         var sendBtn = document.getElementById('sendBtn');
         sendBtn.disabled = true;
@@ -226,23 +221,22 @@
             if (data && data.status === "success") {
                 alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
                 
-                // 1. 저장 완료된 위치에 영구 마커 추가
+                // 1. 저장 완료 마커 추가
                 var savedMarker = new kakao.maps.Marker({
                     position: new kakao.maps.LatLng(payload.lat, payload.lng),
                     map: map
                 });
                 savedMarkers.push(savedMarker);
 
-                // 2. 현재 작업 중이던 임시 클릭 마커 제거 및 초기화
+                // 2. 선택 임시 마커 제거
                 if (activeMarker) {
                     activeMarker.setMap(null);
                     activeMarker = null;
                 }
 
-                // 3. UI 업데이트
+                // 3. UI 업데이트 및 폼 초기화
                 updateDisplayBox(payload, true);
 
-                // 4. 입력 폼 초기화
                 document.getElementById('treeId').value = '';
                 document.getElementById('quantity').value = '';
                 document.getElementById('species').value = '';
