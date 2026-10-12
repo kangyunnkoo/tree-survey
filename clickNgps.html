@@ -3,13 +3,13 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 현장 조사 - 지도 로드 오류 수정</title>
+    <title>수목 현장 조사 - 버튼 높이 고정</title>
     <style>
         html, body { margin:0; padding:0; height:100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         
         #map-wrapper {
             width: 100%;
-            height: 72%;
+            height: 66%;
             overflow: hidden;
             position: relative;
         }
@@ -96,7 +96,7 @@
         }
         .number-badge:active { transform: scale(1.2); }
 
-        /* 크기가 축소된 내 위치 실시간 방향 화살표 마커 (파란색) */
+        /* 내 위치 실시간 방향 화살표 마커 (파란색) */
         .my-location-badge {
             width: 14px;
             height: 14px;
@@ -120,8 +120,9 @@
             top: -5px;
         }
 
+        /* 패널 높이 고정 (34%) */
         #panel {
-            height: 28%;
+            height: 34%;
             background: #ffffff;
             border-top: 1px solid #ccc;
             box-sizing: border-box;
@@ -150,35 +151,39 @@
 
         #panel-body {
             flex: 1;
-            padding: 8px 10px;
+            padding: 6px 10px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             overflow: hidden;
+            box-sizing: border-box;
         }
         #panel.collapsed #panel-body { display: none; }
 
         .input-row { display: flex; gap: 6px; }
         .combo-box { display: flex; flex: 1.2; gap: 3px; }
 
+        /* 입력창 및 셀렉트 박스 높이 36px로 최적화 */
         input, select { 
-            width: 100%; height: 40px; font-size: 14px; 
+            width: 100%; height: 36px; font-size: 13px; 
             border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 8px;
         }
-        input[readonly] { background-color: #f5f5f5; color: #666; height: 34px; font-size: 12px; }
+        input[readonly] { background-color: #f5f5f5; color: #666; height: 28px; font-size: 11px; }
 
         .select-quick {
-            width: 38px; min-width: 38px; padding: 0 2px; text-align: center;
+            width: 36px; min-width: 36px; padding: 0 2px; text-align: center;
             background-color: #f8f9fa; border-color: #ced4da; cursor: pointer;
         }
 
+        /* 전송 버튼 높이 38px 고정 */
         .btn-send { 
-            width: 100%; height: 40px; font-size: 15px;
+            width: 100%; height: 38px; font-size: 14px;
             background-color: #2b8a3e; color: white; font-weight: bold; 
             border: none; border-radius: 6px; cursor: pointer;
         }
         .btn-send:disabled { background-color: #82c91e; cursor: not-allowed; }
 
+        /* 전송/조회 정보 박스 (높이 변화로 인한 버튼 밀림 현상 방지를 위해 fixed/flex 구조 적용) */
         #last-sent-box {
             padding: 4px 8px;
             background-color: #f0fdf4;
@@ -241,6 +246,7 @@
             <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요">
             <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
 
+            <!-- 정보 디스플레이 박스 (표출 시 높이 왜곡 방지) -->
             <div id="last-sent-box">
                 <div class="last-sent-header">
                     <strong id="status-title" style="color: #2b8a3e;">[선택 정보]</strong>
@@ -307,22 +313,18 @@
                 }
             }
 
-            // [안전한 권한 처리 및 나침반 토글 함수]
             window.toggleCompassMode = function() {
                 isCompassActive = !isCompassActive;
 
                 if (isCompassActive) {
                     compassBtn.classList.add("active");
                     
-                    // iOS 13+ 기기에서 사용자 직접 클릭 이벤트 안에서만 안전하게 권한 요청 수행
                     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                         DeviceOrientationEvent.requestPermission().then(response => {
                             if (response === 'granted') {
                                 window.addEventListener('deviceorientation', handleOrientation, true);
                             }
-                        }).catch(err => {
-                            console.warn("방향 센서 권한 거부 또는 지원 안 함", err);
-                        });
+                        }).catch(console.error);
                     } else if (window.DeviceOrientationEvent) {
                         window.addEventListener('deviceorientation', handleOrientation, true);
                     }
@@ -378,7 +380,7 @@
                     mapWrapper.style.height = "calc(100% - 36px)";
                 } else {
                     toggleArrow.textContent = "▲ 폼 숨기기";
-                    mapWrapper.style.height = "72%";
+                    mapWrapper.style.height = "66%";
                 }
                 setTimeout(() => { map.relayout(); }, 200);
             };
@@ -445,173 +447,4 @@
             });
             mapWrapper.addEventListener('touchmove', function(e) {
                 if (e.touches.length > 0) {
-                    if (Math.abs(e.touches[0].clientX - startX) > 5 || Math.abs(e.touches[0].clientY - startY) > 5) isDragging = true;
-                }
-            });
-
-            mapContainer.addEventListener('click', function(e) {
-                if (isDragging) { isDragging = false; return; }
-
-                const rect = mapContainer.getBoundingClientRect();
-                let clickX = e.clientX - rect.left;
-                let clickY = e.clientY - rect.top;
-
-                if (isZoomed) {
-                    clickX = clickX / 2;
-                    clickY = clickY / 2;
-                }
-
-                const projection = map.getProjection();
-                if (!projection) return;
-
-                const point = new kakao.maps.Point(clickX, clickY);
-                const latlng = projection.coordsFromContainerPoint(point);
-
-                if (latlng) {
-                    selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
-                    
-                    if (!activeMarker) {
-                        activeMarker = new kakao.maps.Marker({ position: latlng, map: map });
-                    } else {
-                        activeMarker.setPosition(latlng);
-                        if (!activeMarker.getMap()) activeMarker.setMap(map);
-                    }
-
-                    document.getElementById("coords").value = `선택 좌표: ${selectedCoords.lat.toFixed(6)}, ${selectedCoords.lng.toFixed(6)}`;
-                }
-            });
-
-            window.sendToNotion = function() {
-                const treeId = document.getElementById('treeId').value;
-                const quantity = document.getElementById('quantity').value;
-                const species = document.getElementById('species').value;
-                const status = document.getElementById('status').value;
-
-                if (!selectedCoords || !treeId) {
-                    alert('지도를 터치하여 위치를 선택하고 수목 번호를 입력해 주세요.');
-                    return;
-                }
-
-                lastPayload = {
-                    master_id: masterId,
-                    tree_id: treeId,
-                    quantity: quantity ? parseInt(quantity) : 1,
-                    species: species,
-                    status: status,
-                    lat: selectedCoords.lat,
-                    lng: selectedCoords.lng
-                };
-
-                executeFetch(lastPayload);
-            };
-
-            function executeFetch(payload) {
-                const sendBtn = document.getElementById('sendBtn');
-                sendBtn.disabled = true;
-                sendBtn.innerText = "노션 저장 확인 중...";
-
-                fetch(webhookUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                })
-                .then(response => {
-                    if (!response.ok) throw new Error('서버 응답 오류 (' + response.status + ')');
-                    return response.json();
-                })
-                .then(data => {
-                    if (data && data.status === "success") {
-                        alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
-                        
-                        createCircleNumberMarker(payload);
-                        learnNewOptions(payload.species, payload.status);
-
-                        if (activeMarker) {
-                            activeMarker.setMap(null);
-                            activeMarker = null;
-                        }
-
-                        updateDisplayBox(payload, true, '[저장 성공]');
-
-                        document.getElementById('treeId').value = '';
-                        document.getElementById('quantity').value = '';
-                        document.getElementById('species').value = '';
-                        document.getElementById('status').value = '';
-                        document.getElementById('coords').value = '';
-                        selectedCoords = null;
-                    } else {
-                        throw new Error('노션 DB 입력 처리 실패');
-                    }
-                })
-                .catch(error => {
-                    alert('⚠️ [경고] 노션 저장에 실패했습니다!\n' + error.message + '\n하단의 [재전송] 버튼을 이용해 주세요.');
-                    updateDisplayBox(payload, false, '[저장 실패]');
-                })
-                .finally(() => {
-                    sendBtn.disabled = false;
-                    sendBtn.innerText = "노션 DB로 전송";
-                });
-            }
-
-            function createCircleNumberMarker(payload) {
-                const position = new kakao.maps.LatLng(payload.lat, payload.lng);
-
-                const content = document.createElement('div');
-                content.className = 'number-badge';
-                content.innerText = payload.tree_id;
-
-                const customOverlay = new kakao.maps.CustomOverlay({
-                    position: position,
-                    content: content,
-                    xAnchor: 0.5,
-                    yAnchor: 0.5,
-                    zIndex: 3
-                });
-                customOverlay.setMap(map);
-
-                function handleOverlayClick(e) {
-                    if (e) {
-                        if (e.stopPropagation) e.stopPropagation();
-                        if (e.preventDefault) e.preventDefault();
-                    }
-                    lastPayload = payload;
-                    updateDisplayBox(payload, true, `[No. ${payload.tree_id} 조회]`);
-                }
-
-                content.addEventListener('click', handleOverlayClick);
-                content.addEventListener('touchend', handleOverlayClick);
-                content.addEventListener('mousedown', function(e) { e.stopPropagation(); });
-                content.addEventListener('touchstart', function(e) { e.stopPropagation(); });
-            }
-
-            function updateDisplayBox(payload, isSuccess, titleText) {
-                const displayBox = document.getElementById('last-sent-box');
-                const statusTitle = document.getElementById('status-title');
-                const displayInfo = document.getElementById('last-sent-info');
-
-                if (isSuccess) {
-                    displayBox.style.backgroundColor = '#f0fdf4';
-                    displayBox.style.borderColor = '#2b8a3e';
-                    statusTitle.style.color = '#2b8a3e';
-                } else {
-                    displayBox.style.backgroundColor = '#fff5f5';
-                    displayBox.style.borderColor = '#e03131';
-                    statusTitle.style.color = '#e03131';
-                }
-
-                statusTitle.innerText = titleText || '[선택 정보]';
-                displayInfo.innerHTML = `No.<b>${payload.tree_id}</b> (${payload.species || '-'}/${payload.quantity}주/${payload.status || '-'})`;
-                displayBox.style.display = 'block';
-            }
-
-            window.resendToNotion = function() {
-                if (!lastPayload) {
-                    alert('재전송 또는 조회할 최근 정보가 없습니다.');
-                    return;
-                }
-                executeFetch(lastPayload);
-            };
-        });
-    </script>
-</body>
-</html>
+                    if (Math.abs(e.touches[0].clientX - startX) > 5 ||
