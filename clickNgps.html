@@ -3,13 +3,26 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 현장 조사 - 버튼 높이 고정</title>
+    <title>수목 현장 조사 - 맵 로드 완벽 복구</title>
     <style>
-        html, body { margin:0; padding:0; height:100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        }
         
+        /* 맵 컨테이너와 패널이 화면을 정확히 나눠 가지도록 플렉스박스 구조 적용 */
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+
         #map-wrapper {
             width: 100%;
-            height: 66%;
+            flex: 1;
             overflow: hidden;
             position: relative;
         }
@@ -120,9 +133,11 @@
             top: -5px;
         }
 
-        /* 패널 높이 고정 (34%) */
+        /* 하단 입력 패널 높이 고정 (190px) */
         #panel {
-            height: 34%;
+            width: 100%;
+            height: 190px;
+            flex-shrink: 0;
             background: #ffffff;
             border-top: 1px solid #ccc;
             box-sizing: border-box;
@@ -163,7 +178,6 @@
         .input-row { display: flex; gap: 6px; }
         .combo-box { display: flex; flex: 1.2; gap: 3px; }
 
-        /* 입력창 및 셀렉트 박스 높이 36px로 최적화 */
         input, select { 
             width: 100%; height: 36px; font-size: 13px; 
             border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 8px;
@@ -175,7 +189,6 @@
             background-color: #f8f9fa; border-color: #ced4da; cursor: pointer;
         }
 
-        /* 전송 버튼 높이 38px 고정 */
         .btn-send { 
             width: 100%; height: 38px; font-size: 14px;
             background-color: #2b8a3e; color: white; font-weight: bold; 
@@ -183,7 +196,6 @@
         }
         .btn-send:disabled { background-color: #82c91e; cursor: not-allowed; }
 
-        /* 전송/조회 정보 박스 (높이 변화로 인한 버튼 밀림 현상 방지를 위해 fixed/flex 구조 적용) */
         #last-sent-box {
             padding: 4px 8px;
             background-color: #f0fdf4;
@@ -246,7 +258,6 @@
             <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요">
             <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
 
-            <!-- 정보 디스플레이 박스 (표출 시 높이 왜곡 방지) -->
             <div id="last-sent-box">
                 <div class="last-sent-header">
                     <strong id="status-title" style="color: #2b8a3e;">[선택 정보]</strong>
@@ -372,15 +383,12 @@
             window.togglePanel = function() {
                 const panel = document.getElementById('panel');
                 const toggleArrow = document.getElementById('toggle-arrow');
-                const mapWrapper = document.getElementById('map-wrapper');
                 
                 panel.classList.toggle('collapsed');
                 if (panel.classList.contains('collapsed')) {
                     toggleArrow.textContent = "▼ 폼 펼치기";
-                    mapWrapper.style.height = "calc(100% - 36px)";
                 } else {
                     toggleArrow.textContent = "▲ 폼 숨기기";
-                    mapWrapper.style.height = "66%";
                 }
                 setTimeout(() => { map.relayout(); }, 200);
             };
@@ -447,4 +455,173 @@
             });
             mapWrapper.addEventListener('touchmove', function(e) {
                 if (e.touches.length > 0) {
-                    if (Math.abs(e.touches[0].clientX - startX) > 5 ||
+                    if (Math.abs(e.touches[0].clientX - startX) > 5 || Math.abs(e.touches[0].clientY - startY) > 5) isDragging = true;
+                }
+            });
+
+            mapContainer.addEventListener('click', function(e) {
+                if (isDragging) { isDragging = false; return; }
+
+                const rect = mapContainer.getBoundingClientRect();
+                let clickX = e.clientX - rect.left;
+                let clickY = e.clientY - rect.top;
+
+                if (isZoomed) {
+                    clickX = clickX / 2;
+                    clickY = clickY / 2;
+                }
+
+                const projection = map.getProjection();
+                if (!projection) return;
+
+                const point = new kakao.maps.Point(clickX, clickY);
+                const latlng = projection.coordsFromContainerPoint(point);
+
+                if (latlng) {
+                    selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
+                    
+                    if (!activeMarker) {
+                        activeMarker = new kakao.maps.Marker({ position: latlng, map: map });
+                    } else {
+                        activeMarker.setPosition(latlng);
+                        if (!activeMarker.getMap()) activeMarker.setMap(map);
+                    }
+
+                    document.getElementById("coords").value = `선택 좌표: ${selectedCoords.lat.toFixed(6)}, ${selectedCoords.lng.toFixed(6)}`;
+                }
+            });
+
+            window.sendToNotion = function() {
+                const treeId = document.getElementById('treeId').value;
+                const quantity = document.getElementById('quantity').value;
+                const species = document.getElementById('species').value;
+                const status = document.getElementById('status').value;
+
+                if (!selectedCoords || !treeId) {
+                    alert('지도를 터치하여 위치를 선택하고 수목 번호를 입력해 주세요.');
+                    return;
+                }
+
+                lastPayload = {
+                    master_id: masterId,
+                    tree_id: treeId,
+                    quantity: quantity ? parseInt(quantity) : 1,
+                    species: species,
+                    status: status,
+                    lat: selectedCoords.lat,
+                    lng: selectedCoords.lng
+                };
+
+                executeFetch(lastPayload);
+            };
+
+            function executeFetch(payload) {
+                const sendBtn = document.getElementById('sendBtn');
+                sendBtn.disabled = true;
+                sendBtn.innerText = "노션 저장 확인 중...";
+
+                fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => {
+                    if (!response.ok) throw new Error('서버 응답 오류 (' + response.status + ')');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.status === "success") {
+                        alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
+                        
+                        createCircleNumberMarker(payload);
+                        learnNewOptions(payload.species, payload.status);
+
+                        if (activeMarker) {
+                            activeMarker.setMap(null);
+                            activeMarker = null;
+                        }
+
+                        updateDisplayBox(payload, true, '[저장 성공]');
+
+                        document.getElementById('treeId').value = '';
+                        document.getElementById('quantity').value = '';
+                        document.getElementById('species').value = '';
+                        document.getElementById('status').value = '';
+                        document.getElementById('coords').value = '';
+                        selectedCoords = null;
+                    } else {
+                        throw new Error('노션 DB 입력 처리 실패');
+                    }
+                })
+                .catch(error => {
+                    alert('⚠️ [경고] 노션 저장에 실패했습니다!\n' + error.message + '\n하단의 [재전송] 버튼을 이용해 주세요.');
+                    updateDisplayBox(payload, false, '[저장 실패]');
+                })
+                .finally(() => {
+                    sendBtn.disabled = false;
+                    sendBtn.innerText = "노션 DB로 전송";
+                });
+            }
+
+            function createCircleNumberMarker(payload) {
+                const position = new kakao.maps.LatLng(payload.lat, payload.lng);
+
+                const content = document.createElement('div');
+                content.className = 'number-badge';
+                content.innerText = payload.tree_id;
+
+                const customOverlay = new kakao.maps.CustomOverlay({
+                    position: position,
+                    content: content,
+                    xAnchor: 0.5,
+                    yAnchor: 0.5,
+                    zIndex: 3
+                });
+                customOverlay.setMap(map);
+
+                function handleOverlayClick(e) {
+                    if (e) {
+                        if (e.stopPropagation) e.stopPropagation();
+                        if (e.preventDefault) e.preventDefault();
+                    }
+                    lastPayload = payload;
+                    updateDisplayBox(payload, true, `[No. ${payload.tree_id} 조회]`);
+                }
+
+                content.addEventListener('click', handleOverlayClick);
+                content.addEventListener('touchend', handleOverlayClick);
+                content.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+                content.addEventListener('touchstart', function(e) { e.stopPropagation(); });
+            }
+
+            function updateDisplayBox(payload, isSuccess, titleText) {
+                const displayBox = document.getElementById('last-sent-box');
+                const statusTitle = document.getElementById('status-title');
+                const displayInfo = document.getElementById('last-sent-info');
+
+                if (isSuccess) {
+                    displayBox.style.backgroundColor = '#f0fdf4';
+                    displayBox.style.borderColor = '#2b8a3e';
+                    statusTitle.style.color = '#2b8a3e';
+                } else {
+                    displayBox.style.backgroundColor = '#fff5f5';
+                    displayBox.style.borderColor = '#e03131';
+                    statusTitle.style.color = '#e03131';
+                }
+
+                statusTitle.innerText = titleText || '[선택 정보]';
+                displayInfo.innerHTML = `No.<b>${payload.tree_id}</b> (${payload.species || '-'}/${payload.quantity}주/${payload.status || '-'})`;
+                displayBox.style.display = 'block';
+            }
+
+            window.resendToNotion = function() {
+                if (!lastPayload) {
+                    alert('재전송 또는 조회할 최근 정보가 없습니다.');
+                    return;
+                }
+                executeFetch(lastPayload);
+            };
+        });
+    </script>
+</body>
+</html>
