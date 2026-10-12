@@ -1,299 +1,583 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>수목 위치 선택 (드래그 드롭 마커 생성 방지)</title>
-  <style>
-    html, body { margin:0; padding:0; height:100%; overflow: hidden; }
-    
-    #map-wrapper {
-      width: 100%;
-      height: 85%;
-      overflow: hidden;
-      position: relative;
-    }
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>수목 현장 조사 - 스마트 에디션</title>
+    <style>
+        html, body { margin:0; padding:0; height:100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        
+        #map-wrapper {
+            width: 100%;
+            height: 74%;
+            overflow: hidden;
+            position: relative;
+        }
 
-    /* left top 기준으로 확대하여 좌표 오차 제거 */
-    #map {
-      width: 100%;
-      height: 100%;
-      transform-origin: 0 0;
-      transition: transform 0.2s ease-in-out;
-    }
+        #map {
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+            transition: transform 0.2s ease-in-out;
+        }
 
-    #map.zoomed {
-      width: 50%;
-      height: 50%;
-      transform: scale(2);
-    }
+        #map.zoomed {
+            width: 50%;
+            height: 50%;
+            transform: scale(2);
+        }
 
-    /* 화면 맨 왼쪽 위 2배 확대 버튼 */
-    #zoom-toggle-btn {
-      position: absolute;
-      top: 15px;
-      left: 15px;
-      z-index: 10;
-      background: #ffffff;
-      color: #333333;
-      border: 1px solid #cccccc;
-      padding: 8px 14px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: bold;
-      cursor: pointer;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-      user-select: none;
-    }
+        /* 2배 확대 버튼 */
+        #zoom-toggle-btn {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 10;
+            background: #ffffff;
+            color: #333333;
+            border: 1px solid #cccccc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            user-select: none;
+        }
+        #zoom-toggle-btn.active {
+            background: #007bff;
+            color: #ffffff;
+            border-color: #0056b3;
+        }
 
-    #zoom-toggle-btn.active {
-      background: #007bff;
-      color: #ffffff;
-      border-color: #0056b3;
-    }
+        /* 내 위치 이동 및 방향 정렬 버튼 */
+        #my-location-btn {
+            position: absolute;
+            top: 12px;
+            left: 145px;
+            z-index: 10;
+            background: #ffffff;
+            color: #333333;
+            border: 1px solid #cccccc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            user-select: none;
+        }
 
-    #panel {
-      height:15%;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding:10px;
-      background:#f4f4f4;
-      border-top:1px solid #ccc;
-      font-size:14px;
-      box-sizing: border-box;
-      position: relative;
-      z-index: 10;
-    }
-    #coords { flex:1; }
-    #saveBtn {
-      padding:8px 14px;
-      font-size:14px;
-      background:#007bff;
-      color:white;
-      border:none;
-      border-radius:4px;
-      cursor:pointer;
-    }
-    #saveBtn:disabled {
-      background:#aaa;
-      cursor:not-allowed;
-    }
-  </style>
-  <!-- 카카오맵 JS SDK -->
-  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+        /* 1/2 축소 원번호 마커 커스텀 오버레이 */
+        .number-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            background-color: #2b8a3e;
+            color: #ffffff;
+            font-size: 9px;
+            font-weight: bold;
+            border-radius: 50%;
+            border: 1.5px solid #ffffff;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+            cursor: pointer;
+            user-select: none;
+            line-height: 1;
+        }
+        .number-badge:active { transform: scale(1.2); }
+
+        /* 하단 수목 정보 입력 패널 및 토글 헤더 */
+        #panel {
+            height: 26%;
+            background: #ffffff;
+            border-top: 1px solid #ccc;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            transition: height 0.3s ease;
+        }
+        #panel.collapsed {
+            height: 36px;
+        }
+
+        /* 패널 접기/펼치기 토글 바 */
+        #panel-toggle-bar {
+            height: 36px;
+            background: #f1f3f5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #495057;
+            cursor: pointer;
+            border-bottom: 1px solid #dee2e6;
+            user-select: none;
+        }
+
+        #panel-body {
+            flex: 1;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+        }
+        #panel.collapsed #panel-body {
+            display: none;
+        }
+
+        .input-row { display: flex; gap: 6px; }
+        .combo-box { display: flex; flex: 1.2; gap: 3px; }
+
+        input, select, button { 
+            width: 100%; height: 34px; font-size: 13px; 
+            border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 8px;
+        }
+        input[readonly] { background-color: #f5f5f5; color: #666; }
+
+        .select-quick {
+            width: 36px; min-width: 36px; padding: 0 2px; text-align: center;
+            background-color: #f8f9fa; border-color: #ced4da; cursor: pointer;
+        }
+
+        .btn-send { 
+            background-color: #2b8a3e; color: white; font-weight: bold; 
+            border: none; font-size: 14px; cursor: pointer; height: 34px;
+        }
+        .btn-send:disabled { background-color: #82c91e; cursor: not-allowed; }
+
+        /* 최근 전송 및 정보 디스플레이 영역 */
+        #last-sent-box {
+            padding: 4px 8px;
+            background-color: #f0fdf4;
+            border: 1px solid #2b8a3e;
+            border-radius: 6px;
+            font-size: 11px;
+            color: #222;
+            display: none;
+        }
+        .last-sent-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .btn-resend {
+            background-color: #e03131; color: white; font-size: 10px; font-weight: bold;
+            border: none; border-radius: 3px; padding: 1px 5px; cursor: pointer; width: auto; height: auto;
+        }
+    </style>
+    <!-- 카카오맵 JS SDK -->
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6&autoload=false"></script>
 </head>
 <body>
-  <div id="map-wrapper">
-    <button id="zoom-toggle-btn">🔍 2배 확대 ON/OFF</button>
-    <div id="map"></div>
-  </div>
-  <div id="panel">
-    <div id="coords">지도에서 수목 위치를 클릭하세요.</div>
-    <button id="saveBtn" disabled>저장</button>
-  </div>
+    <div id="map-wrapper">
+        <button id="zoom-toggle-btn">🔍 2배 확대 ON/OFF</button>
+        <button id="my-location-btn" onclick="moveToCurrentLocation()">📍 내 위치 & 북쪽 정렬</button>
+        <div id="map"></div>
+    </div>
+    
+    <div id="panel" class="">
+        <!-- 패널 접기/펼치기 토글 바 -->
+        <div id="panel-toggle-bar" onclick="togglePanel()">
+            <span>🌳 수목 조사 입력폼</span>
+            <span id="toggle-arrow">▲ 폼 숨기기</span>
+        </div>
 
-  <script>
-    window.onload = function() {
-      const params = new URLSearchParams(window.location.search);
-      const name = params.get("name");
-      const centerLat = parseFloat(params.get("centerLat"));
-      const centerLng = parseFloat(params.get("centerLng"));
-      const mapContainer = document.getElementById('map');
-      
-      const mapOptions = { 
-        center: new kakao.maps.LatLng(37.5665, 126.9780), 
-        level: 1 
-      };
-      const map = new kakao.maps.Map(mapContainer, mapOptions);
+        <div id="panel-body">
+            <!-- 1행: 번호 + 수종(입력창 + 동적 학습 퀵선택) -->
+            <div class="input-row">
+                <input type="text" id="treeId" placeholder="번호 (예: 101)" style="flex: 0.8;">
+                <div class="combo-box">
+                    <input type="text" id="species" placeholder="수종 직접 입력">
+                    <select id="species-select" class="select-quick" onchange="applyQuickValue('species', this)">
+                        <option value="">▼</option>
+                        <option value="배롱나무">배롱나무</option>
+                        <option value="벚나무류">벚나무류</option>
+                        <option value="산딸나무">산딸나무</option>
+                        <option value="산수유">산수유</option>
+                        <option value="소나무(반송)">소나무(반송)</option>
+                        <option value="소나무(장송)">소나무(장송)</option>
+                        <option value="왕벚나무">왕벚나무</option>
+                        <option value="전나무">전나무</option>
+                        <option value="철쭉류">철쭉류</option>
+                        <option value="팽나무">팽나무</option>
+                        <option value="회양목">회양목</option>
+                    </select>
+                </div>
+            </div>
 
-      let centerMarker = null; // 현재 위치 마커
-      let userMarker = null;   // 사용자가 클릭한 마커
-      let selectedCoords = null;
-      let isZoomed = false;    // 2배 확대 상태 플래그
+            <!-- 2행: 주수 + 상태(입력창 + 동적 학습 퀵선택) -->
+            <div class="input-row">
+                <input type="number" id="quantity" placeholder="주수 (예: 1)" style="flex: 0.8;">
+                <div class="combo-box">
+                    <input type="text" id="status" placeholder="상태 직접 입력">
+                    <select id="status-select" class="select-quick" onchange="applyQuickValue('status', this)">
+                        <option value="">▼</option>
+                        <option value="고사">고사</option>
+                        <option value="수간부후()">수간부후()</option>
+                        <option value="가지고사()">가지고사()</option>
+                        <option value="심식">심식</option>
+                        <option value="수세위약">수세위약</option>
+                    </select>
+                </div>
+            </div>
 
-      // [드래그 감지용 변수]
-      let isDragging = false;
-      let startX = 0;
-      let startY = 0;
+            <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="height:26px; font-size:11px;">
+            <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
 
-      const coordsBox = document.getElementById("coords");
-      const saveBtn = document.getElementById("saveBtn");
-      const zoomBtn = document.getElementById("zoom-toggle-btn");
+            <!-- 정보 디스플레이 및 재전송 박스 -->
+            <div id="last-sent-box">
+                <div class="last-sent-header">
+                    <strong id="status-title" style="color: #2b8a3e;">[선택 정보]</strong>
+                    <span id="last-sent-info">-</span>
+                    <button class="btn-resend" onclick="resendToNotion()">↻ 재전송</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-      const centerImage = new kakao.maps.MarkerImage(
-        "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png",
-        new kakao.maps.Size(24, 35)
-      );
+    <script>
+        kakao.maps.load(function() {
+            const params = new URLSearchParams(window.location.search);
+            const masterId = params.get("master_id") || "";
+            const centerLat = parseFloat(params.get("lat")) || 37.5794;
+            const centerLng = parseFloat(params.get("lng")) || 126.9033;
+            
+            const mapContainer = document.getElementById('map');
+            const mapOptions = { 
+                center: new kakao.maps.LatLng(centerLat, centerLng), 
+                level: 1 
+            };
+            const map = new kakao.maps.Map(mapContainer, mapOptions);
 
-      // 1. 2배 확대 토글 버튼 이벤트
-      zoomBtn.addEventListener("click", function() {
-        isZoomed = !isZoomed;
-        const currentCenter = map.getCenter();
-        
-        if (isZoomed) {
-          mapContainer.classList.add("zoomed");
-          zoomBtn.classList.add("active");
-          zoomBtn.textContent = "🔍 2배 확대 [켜짐]";
-        } else {
-          mapContainer.classList.remove("zoomed");
-          zoomBtn.classList.remove("active");
-          zoomBtn.textContent = "🔍 2배 확대 ON/OFF";
-        }
+            let activeMarker = null; // 선택 위치용 임시 핀 마커
+            let myLocationMarker = null; // 현장 조사자 실시간 GPS 마커
+            let selectedCoords = null;
+            let isZoomed = false;
 
-        setTimeout(() => {
-          map.relayout();
-          map.setCenter(currentCenter);
-        }, 200);
-      });
+            let isDragging = false;
+            let startX = 0, startY = 0;
 
-      // 2. GPS로 현재 위치 가져오기
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function(position) {
-          const lat = centerLat || position.coords.latitude;
-          const lng = centerLng || position.coords.longitude;
-          const locPosition = new kakao.maps.LatLng(lat, lng);
-          map.setCenter(locPosition);
+            const zoomBtn = document.getElementById("zoom-toggle-btn");
+            const mapWrapper = document.getElementById("map-wrapper");
+            const webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1";
+            let lastPayload = null;
 
-          centerMarker = new kakao.maps.Marker({
-            position: locPosition,
-            map: map,
-            image: centerImage
-          });
-        }, function(error) {
-          console.warn("현재 위치를 가져올 수 없습니다.", error);
-          const fallback = new kakao.maps.LatLng(37.5665, 126.9780);
-          map.setCenter(fallback);
-          centerMarker = new kakao.maps.Marker({
-            position: fallback,
-            map: map,
-            image: centerImage
-          });
+            // [기능 1] 실시간 GPS 내 위치 추적 및 표시
+            function updateCurrentLocation() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.watchPosition(function(position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const locPosition = new kakao.maps.LatLng(lat, lng);
+
+                        if (!myLocationMarker) {
+                            // 파란색 원형 마커나 기본 마커 생성 (여기서는 기본 마커 사용)
+                            myLocationMarker = new kakao.maps.Marker({
+                                position: locPosition,
+                                map: map
+                            });
+                        } else {
+                            myLocationMarker.setPosition(locPosition);
+                        }
+                    }, function(error) {
+                        console.warn("GPS 위치를 가져올 수 없습니다.", error);
+                    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
+                }
+            }
+            updateCurrentLocation();
+
+            // [기능 1-2] 내 위치 버튼 클릭 시 이동 및 북쪽 정렬(지도 중심 재설정)
+            window.moveToCurrentLocation = function() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(function(position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const locPosition = new kakao.maps.LatLng(lat, lng);
+                        
+                        map.setCenter(locPosition);
+                        map.setLevel(1); // 확대 레벨 유지
+                        alert("내 위치로 이동 및 북쪽 정렬되었습니다.");
+                    }, function() {
+                        alert("현재 위치를 가져오지 못했습니다.");
+                    });
+                }
+            };
+
+            // [기능 3] 입력폼 Show/Hide 토글
+            window.togglePanel = function() {
+                const panel = document.getElementById('panel');
+                const toggleArrow = document.getElementById('toggle-arrow');
+                const mapWrapper = document.getElementById('map-wrapper');
+                
+                panel.classList.toggle('collapsed');
+                if (panel.classList.contains('collapsed')) {
+                    toggleArrow.textContent = "▼ 폼 펼치기";
+                    mapWrapper.style.height = "calc(100% - 36px)";
+                } else {
+                    toggleArrow.textContent = "▲ 폼 숨기기";
+                    mapWrapper.style.height = "74%";
+                }
+                setTimeout(() => { map.relayout(); }, 200);
+            };
+
+            // 2배 확대 토글 버튼
+            zoomBtn.addEventListener("click", function() {
+                isZoomed = !isZoomed;
+                const currentCenter = map.getCenter();
+                
+                if (isZoomed) {
+                    mapContainer.classList.add("zoomed");
+                    zoomBtn.classList.add("active");
+                    zoomBtn.textContent = "🔍 2배 확대 [켜짐]";
+                } else {
+                    mapContainer.classList.remove("zoomed");
+                    zoomBtn.classList.remove("active");
+                    zoomBtn.textContent = "🔍 2배 확대 ON/OFF";
+                }
+
+                setTimeout(() => {
+                    map.relayout();
+                    map.setCenter(currentCenter);
+                }, 200);
+            });
+
+            // 퀵 선택 함수
+            window.applyQuickValue = function(fieldId, selectObj) {
+                if (selectObj.value) {
+                    document.getElementById(fieldId).value = selectObj.value;
+                    selectObj.value = "";
+                }
+            };
+
+            // [기능 2] 전송 성공 시 입력된 수종/상태를 중복 없이 동적 드롭다운 옵션에 추가하는 학습 기능
+            function learnNewOptions(species, status) {
+                if (species) {
+                    addOptionIfNotExists('species-select', species);
+                }
+                if (status) {
+                    addOptionIfNotExists('status-select', status);
+                }
+            }
+
+            function addOptionIfNotExists(selectId, value) {
+                const selectElem = document.getElementById(selectId);
+                let exists = false;
+                for (let i = 0; i < selectElem.options.length; i++) {
+                    if (selectElem.options[i].value === value) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    const opt = document.createElement('option');
+                    opt.value = value;
+                    opt.text = value;
+                    selectElem.appendChild(opt);
+                }
+            }
+
+            // 드래그 판단 이벤트
+            mapWrapper.addEventListener('mousedown', function(e) {
+                isDragging = false; startX = e.clientX; startY = e.clientY;
+            });
+            mapWrapper.addEventListener('mousemove', function(e) {
+                if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) isDragging = true;
+            });
+            mapWrapper.addEventListener('touchstart', function(e) {
+                if (e.touches.length > 0) {
+                    isDragging = false; startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+                }
+            });
+            mapWrapper.addEventListener('touchmove', function(e) {
+                if (e.touches.length > 0) {
+                    if (Math.abs(e.touches[0].clientX - startX) > 5 || Math.abs(e.touches[0].clientY - startY) > 5) isDragging = true;
+                }
+            });
+
+            // 지도 클릭 시 좌표 정밀 변환 처리
+            mapContainer.addEventListener('click', function(e) {
+                if (isDragging) { isDragging = false; return; }
+
+                const rect = mapContainer.getBoundingClientRect();
+                let clickX = e.clientX - rect.left;
+                let clickY = e.clientY - rect.top;
+
+                if (isZoomed) {
+                    clickX = clickX / 2;
+                    clickY = clickY / 2;
+                }
+
+                const projection = map.getProjection();
+                if (!projection) return;
+
+                const point = new kakao.maps.Point(clickX, clickY);
+                const latlng = projection.coordsFromContainerPoint(point);
+
+                if (latlng) {
+                    selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
+                    
+                    if (!activeMarker) {
+                        activeMarker = new kakao.maps.Marker({ 
+                            position: latlng, 
+                            map: map 
+                        });
+                    } else {
+                        activeMarker.setPosition(latlng);
+                        if (!activeMarker.getMap()) {
+                            activeMarker.setMap(map);
+                        }
+                    }
+
+                    document.getElementById("coords").value = `선택 좌표: ${selectedCoords.lat.toFixed(6)}, ${selectedCoords.lng.toFixed(6)}`;
+                }
+            });
+
+            // 노션 DB 전송 함수
+            window.sendToNotion = function() {
+                const treeId = document.getElementById('treeId').value;
+                const quantity = document.getElementById('quantity').value;
+                const species = document.getElementById('species').value;
+                const status = document.getElementById('status').value;
+
+                if (!selectedCoords || !treeId) {
+                    alert('지도를 터치하여 위치를 선택하고 수목 번호를 입력해 주세요.');
+                    return;
+                }
+
+                lastPayload = {
+                    master_id: masterId,
+                    tree_id: treeId,
+                    quantity: quantity ? parseInt(quantity) : 1,
+                    species: species,
+                    status: status,
+                    lat: selectedCoords.lat,
+                    lng: selectedCoords.lng
+                };
+
+                executeFetch(lastPayload);
+            };
+
+            // 서버 전송 및 원번호 오버레이 생성
+            function executeFetch(payload) {
+                const sendBtn = document.getElementById('sendBtn');
+                sendBtn.disabled = true;
+                sendBtn.innerText = "노션 저장 확인 중...";
+
+                fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => {
+                    if (!response.ok) throw new Error('서버 응답 오류 (' + response.status + ')');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.status === "success") {
+                        alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
+                        
+                        // ① 축소된 원번호 마커 생성
+                        createCircleNumberMarker(payload);
+
+                        // ② 새로운 수종/상태 옵션 자동 학습 반영
+                        learnNewOptions(payload.species, payload.status);
+
+                        // ③ 선택용 임시 핀 마커 제거
+                        if (activeMarker) {
+                            activeMarker.setMap(null);
+                            activeMarker = null;
+                        }
+
+                        updateDisplayBox(payload, true, '[저장 성공]');
+
+                        // ④ 입력 폼 초기화
+                        document.getElementById('treeId').value = '';
+                        document.getElementById('quantity').value = '';
+                        document.getElementById('species').value = '';
+                        document.getElementById('status').value = '';
+                        document.getElementById('coords').value = '';
+                        selectedCoords = null;
+                    } else {
+                        throw new Error('노션 DB 입력 처리 실패');
+                    }
+                })
+                .catch(error => {
+                    alert('⚠️ [경고] 노션 저장에 실패했습니다!\n' + error.message + '\n하단의 [재전송] 버튼을 이용해 주세요.');
+                    updateDisplayBox(payload, false, '[저장 실패]');
+                })
+                .finally(() => {
+                    sendBtn.disabled = false;
+                    sendBtn.innerText = "노션 DB로 전송";
+                });
+            }
+
+            // 원번호 커스텀 오버레이 생성
+            function createCircleNumberMarker(payload) {
+                const position = new kakao.maps.LatLng(payload.lat, payload.lng);
+
+                const content = document.createElement('div');
+                content.className = 'number-badge';
+                content.innerText = payload.tree_id;
+
+                const customOverlay = new kakao.maps.CustomOverlay({
+                    position: position,
+                    content: content,
+                    xAnchor: 0.5,
+                    yAnchor: 0.5,
+                    zIndex: 3
+                });
+                customOverlay.setMap(map);
+
+                function handleOverlayClick(e) {
+                    if (e) {
+                        if (e.stopPropagation) e.stopPropagation();
+                        if (e.preventDefault) e.preventDefault();
+                    }
+                    lastPayload = payload;
+                    updateDisplayBox(payload, true, `[No. ${payload.tree_id} 조회]`);
+                }
+
+                content.addEventListener('click', handleOverlayClick);
+                content.addEventListener('touchend', handleOverlayClick);
+                content.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+                content.addEventListener('touchstart', function(e) { e.stopPropagation(); });
+            }
+
+            function updateDisplayBox(payload, isSuccess, titleText) {
+                const displayBox = document.getElementById('last-sent-box');
+                const statusTitle = document.getElementById('status-title');
+                const displayInfo = document.getElementById('last-sent-info');
+
+                if (isSuccess) {
+                    displayBox.style.backgroundColor = '#f0fdf4';
+                    displayBox.style.borderColor = '#2b8a3e';
+                    statusTitle.style.color = '#2b8a3e';
+                } else {
+                    displayBox.style.backgroundColor = '#fff5f5';
+                    displayBox.style.borderColor = '#e03131';
+                    statusTitle.style.color = '#e03131';
+                }
+
+                statusTitle.innerText = titleText || '[선택 정보]';
+                displayInfo.innerHTML = `No.<b>${payload.tree_id}</b> (${payload.species || '-'}/${payload.quantity}주/${payload.status || '-'})`;
+                displayBox.style.display = 'block';
+            }
+
+            window.resendToNotion = function() {
+                if (!lastPayload) {
+                    alert('재전송 또는 조회할 최근 정보가 없습니다.');
+                    return;
+                }
+                executeFetch(lastPayload);
+            };
         });
-      } else {
-        const fallback = new kakao.maps.LatLng(37.5665, 126.9780);
-        map.setCenter(fallback);
-        centerMarker = new kakao.maps.Marker({
-          position: fallback,
-          map: map,
-          image: centerImage
-        });
-      }
-
-      // 3. 드래그 시작/이동/종료 이벤트 판별 (마우스 & 터치 보정)
-      mapContainer.addEventListener('mousedown', function(e) {
-        isDragging = false;
-        startX = e.clientX;
-        startY = e.clientY;
-      });
-
-      mapContainer.addEventListener('mousemove', function(e) {
-        // 5px 이상 이동하면 단순 클릭이 아닌 드래그로 간주
-        if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
-          isDragging = true;
-        }
-      });
-
-      // 터치 기기(모바일) 대응
-      mapContainer.addEventListener('touchstart', function(e) {
-        if (e.touches.length > 0) {
-          isDragging = false;
-          startX = e.touches[0].clientX;
-          startY = e.touches[0].clientY;
-        }
-      });
-
-      mapContainer.addEventListener('touchmove', function(e) {
-        if (e.touches.length > 0) {
-          if (Math.abs(e.touches[0].clientX - startX) > 5 || Math.abs(e.touches[0].clientY - startY) > 5) {
-            isDragging = true;
-          }
-        }
-      });
-
-      // 4. 지도 클릭 이벤트 (드래그가 아닐 때만 마커 생성)
-      mapContainer.addEventListener('click', function(e) {
-        // 드래그 후 드롭한 경우 클릭 처리 무시
-        if (isDragging) {
-          isDragging = false;
-          return;
-        }
-
-        const rect = mapContainer.getBoundingClientRect();
-        
-        let clickX = e.clientX - rect.left;
-        let clickY = e.clientY - rect.top;
-
-        if (isZoomed) {
-          clickX = clickX / 2;
-          clickY = clickY / 2;
-        }
-
-        const projection = map.getProjection();
-        const point = new kakao.maps.Point(clickX, clickY);
-        const latlng = projection.coordsFromContainerPoint(point);
-
-        if (latlng) {
-          selectLocation(latlng);
-        }
-      });
-
-      // 5. 마커 생성 및 좌표 저장
-      function selectLocation(latlng) {
-        if (userMarker) userMarker.setMap(null);
-        
-        userMarker = new kakao.maps.Marker({
-          position: latlng,
-          map: map
-        });
-        
-        selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
-        coordsBox.textContent = `선택된 좌표 → 위도: ${selectedCoords.lat.toFixed(6)}, 경도: ${selectedCoords.lng.toFixed(6)}`;
-        saveBtn.disabled = false;
-      }
-
-      // 6. 저장 및 Webhook 전송
-      saveBtn.addEventListener("click", async function() {
-        if (!selectedCoords) return;
-        
-        try {
-          const res = await fetch("https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: name,
-              latitude: selectedCoords.lat,
-              longitude: selectedCoords.lng
-            })
-          });
-
-          if (!res.ok) throw new Error("Webhook 응답 실패: " + res.status);
-        
-          alert("좌표가 Webhook으로 전송되었습니다!");
-        
-          const canClose = !!window.opener || /notion/i.test(navigator.userAgent) || /wv|webview|android.*version/i.test(navigator.userAgent);
-        
-          if (canClose) {
-            setTimeout(() => {
-              try {
-                window.close();
-              } catch (e) {
-                console.warn("window.close() 실패:", e);
-              }
-            }, 200);
-            return;
-          }
-        
-          document.getElementById("coords").textContent = "좌표 전송 완료. 이 창을 닫아주세요.";
-          
-        } catch (err) {
-          console.error("저장 실패:", err);
-          alert("좌표 전송 중 오류가 발생했습니다.");
-        }
-      });
-
-      const mapTypeControl = new kakao.maps.MapTypeControl();
-      map.addControl(mapTypeControl, kakao.maps.ControlPosition.TOPRIGHT);
-    }
-  </script>
+    </script>
 </body>
 </html>
