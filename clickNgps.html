@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 현장 조사 - 실시간 위치 및 나침반 토글</title>
+    <title>수목 현장 조사 - 스마트 에디션</title>
     <style>
         html, body { margin:0; padding:0; height:100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         
@@ -57,8 +57,8 @@
             transform: translateY(-50%);
             z-index: 10;
             background: #ffffff;
-            color: #2b8a3e;
-            border: 2px solid #2b8a3e;
+            color: #1c7ed6;
+            border: 2px solid #1c7ed6;
             width: 48px;
             height: 48px;
             border-radius: 50%;
@@ -71,12 +71,12 @@
             user-select: none;
             transition: background-color 0.2s, color 0.2s;
         }
-        /* 활성화(켜짐) 상태일 때의 스타일 */
         #compass-btn.active {
-            background: #2b8a3e;
+            background: #1c7ed6;
             color: #ffffff;
         }
 
+        /* 수목 저장 완료된 원번호 마커 (초록색) */
         .number-badge {
             display: flex;
             align-items: center;
@@ -95,6 +95,30 @@
             line-height: 1;
         }
         .number-badge:active { transform: scale(1.2); }
+
+        /* 내 위치 실시간 방향 화살표 마커 (파란색 독자 디자인) */
+        .my-location-badge {
+            width: 20px;
+            height: 20px;
+            background-color: #1c7ed6;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s ease;
+        }
+        .my-location-badge::after {
+            content: '';
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 9px solid #ffffff;
+            position: absolute;
+            top: -6px;
+        }
 
         #panel {
             height: 26%;
@@ -179,8 +203,8 @@
 <body>
     <div id="map-wrapper">
         <button id="zoom-toggle-btn">🔍 2배 확대 ON/OFF</button>
-        <!-- 오른쪽 중앙 나침반 토글 버튼 -->
-        <button id="compass-btn" onclick="toggleCompassMode()" title="실시간 위치 추적 및 정렬 토글">🧭</button>
+        <!-- 오른쪽 중앙 나침반 방향 토글 버튼 -->
+        <button id="compass-btn" onclick="toggleCompassMode()" title="실시간 내 시선 방향 정렬 토글">🧭</button>
         <div id="map"></div>
     </div>
     
@@ -241,14 +265,14 @@
             const map = new kakao.maps.Map(mapContainer, mapOptions);
 
             let activeMarker = null; 
-            let myLocationMarker = null; 
+            let myLocationOverlay = null; // 파란색 화살표 내 위치 커스텀 오버레이
+            let myLocationEl = null;
             let selectedCoords = null;
             let isZoomed = false;
 
             let isDragging = false;
             let startX = 0, startY = 0;
             
-            // 나침반(실시간 트래킹) 토글 상태 변수
             let isCompassActive = false;
             let watchId = null;
 
@@ -258,54 +282,88 @@
             const webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1";
             let lastPayload = null;
 
-            // [기능] 실시간 내 위치 GPS 마커 항상 표시 백그라운드 구동
-            function initBackgroundLocation() {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(function(position) {
-                        const locPosition = new kakao.maps.LatLng(position.coords.latitude, position.coords.longitude);
-                        myLocationMarker = new kakao.maps.Marker({ position: locPosition, map: map });
+            // [기능] 파란색 화살표 형태의 내 위치 마커 생성/업데이트
+            function updateMyLocation(lat, lng, heading) {
+                const locPosition = new kakao.maps.LatLng(lat, lng);
+
+                if (!myLocationOverlay) {
+                    myLocationEl = document.createElement('div');
+                    myLocationEl.className = 'my-location-badge';
+
+                    myLocationOverlay = new kakao.maps.CustomOverlay({
+                        position: locPosition,
+                        content: myLocationEl,
+                        xAnchor: 0.5,
+                        yAnchor: 0.5,
+                        zIndex: 5
                     });
+                    myLocationOverlay.setMap(map);
+                } else {
+                    myLocationOverlay.setPosition(locPosition);
+                }
+
+                // 기기 방향(Heading)이 있으면 화살표 회전 적용
+                if (heading !== null && !isNaN(heading) && myLocationEl) {
+                    myLocationEl.style.transform = `rotate(${heading}deg)`;
                 }
             }
-            initBackgroundLocation();
 
-            // [기능] 오른쪽 중앙 나침반 버튼 토글 함수 (활성화 / 비활성화)
+            // 백그라운드 초기 위치 설정
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    updateMyLocation(position.coords.latitude, position.coords.longitude, 0);
+                });
+            }
+
+            // [기능] 오른쪽 중앙 나침반 버튼 토글 (실시간 위치 추적 및 시선 방위 연동)
             window.toggleCompassMode = function() {
                 isCompassActive = !isCompassActive;
 
                 if (isCompassActive) {
-                    // 활성화
                     compassBtn.classList.add("active");
-                    alert("나침반 방향(위치 추적) 연동이 활성화되었습니다.");
+                    alert("나침반(시선 방향) 연동이 활성화되었습니다.");
 
+                    // 1. GPS 위치 추적 시작
                     if (navigator.geolocation) {
                         watchId = navigator.geolocation.watchPosition(function(position) {
                             const lat = position.coords.latitude;
                             const lng = position.coords.longitude;
-                            const locPosition = new kakao.maps.LatLng(lat, lng);
+                            updateMyLocation(lat, lng, null);
+                            map.setCenter(new kakao.maps.LatLng(lat, lng));
+                        }, null, { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 });
+                    }
 
-                            if (!myLocationMarker) {
-                                myLocationMarker = new kakao.maps.Marker({ position: locPosition, map: map });
-                            } else {
-                                myLocationMarker.setPosition(locPosition);
-                            }
-                            // 활성화 상태에서는 이동할 때마다 지도가 내 위치를 중심으로 정렬됨
-                            map.setCenter(locPosition);
-                        }, function(error) {
-                            console.warn("GPS 추적 오류", error);
-                        }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 });
+                    // 2. 기기 방위각(나침반 센서) 연동
+                    if (window.DeviceOrientationEvent) {
+                        window.addEventListener('deviceorientation', handleOrientation, true);
                     }
                 } else {
-                    // 비활성화
                     compassBtn.classList.remove("active");
-                    alert("나침반 방향(위치 추적) 연동이 비활성화되었습니다.");
+                    alert("나침반(시선 방향) 연동이 비활성화되었습니다.");
 
                     if (watchId !== null) {
                         navigator.geolocation.clearWatch(watchId);
                         watchId = null;
                     }
+                    if (window.DeviceOrientationEvent) {
+                        window.removeEventListener('deviceorientation', handleOrientation, true);
+                    }
                 }
             };
+
+            // 기기 회전 각도 처리 함수
+            function handleOrientation(event) {
+                let heading = null;
+                if (event.webkitCompassHeading) {
+                    heading = event.webkitCompassHeading; // iOS 사파리 기준 방위각
+                } else if (event.alpha) {
+                    heading = 360 - event.alpha; // 안드로이드 기준 방위각
+                }
+
+                if (heading !== null && myLocationEl) {
+                    myLocationEl.style.transform = `rotate(${heading}deg)`;
+                }
+            }
 
             window.togglePanel = function() {
                 const panel = document.getElementById('panel');
