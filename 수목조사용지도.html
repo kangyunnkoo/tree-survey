@@ -11,75 +11,105 @@
       margin: 0;
       padding: 2rem;
     }
-    #map {
+    #map-container {
       width: 1200px;
       height: 1000px;
       margin: 0 auto;
       border: 2px solid #333;
       border-radius: 8px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      overflow: hidden;
+      background: #fff;
+    }
+    /* StaticMap이 영역을 꽉 채우도록 설정 */
+    #map {
+      width: 100%;
+      height: 100%;
     }
     #captureBtn {
       margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 1rem;
+      padding: 12px 24px;
+      font-size: 1.1rem;
       background-color: #4CAF50;
       color: white;
       border: none;
       border-radius: 5px;
       cursor: pointer;
+      font-weight: bold;
     }
     #captureBtn:hover {
       background-color: #45a049;
     }
+    p {
+      color: #555;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
-  <h2>📍 아파트 수목조사용 카카오맵</h2>
-  <div id="map"></div>
+
+  <h2>📍 아파트 수목조사용 지도 캡처</h2>
+  
+  <div id="map-container">
+    <!-- 정적 지도가 그려질 영역 -->
+    <div id="map"></div>
+  </div>
+
   <button id="captureBtn">지도 이미지 캡처하기</button>
-  <p><b>이미지를 다른 이름으로 저장</b>을 이용하세요</p>
+  <p><b>지도 이미지 캡처하기</b> 버튼을 누르면 자동으로 파일이 다운로드됩니다.</p>
 
   <!-- ✅ html2canvas 라이브러리 -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
-  <!-- ✅ 카카오맵 JS SDK (자신의 앱키로 변경하세요) -->
+  <!-- ✅ 카카오맵 JS SDK -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
 
   <script>
-    // URL 파라미터 파싱
+    // URL 파라미터 파싱 (기본값: 서울시청)
     const params = new URLSearchParams(window.location.search);
-    const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본: 서울시청
+    const centerLat = parseFloat(params.get("centerLat")) || 37.5665;
     const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
-    const level = parseFloat(params.get("level")) || 1;
+    const level = parseInt(params.get("level")) || 3;
+
+    // 카카오맵 좌표 객체 생성
+    const staticCenter = new kakao.maps.LatLng(centerLat, centerLng);
 
     // 지도 표시 영역
     const container = document.getElementById('map');
-    const options = {
-      center: new kakao.maps.LatLng(centerLat, centerLng),
-      level: level // level 5~6 추천
-    };
-
-    // ✅ StaticMap 객체 생성
-    const staticMap = new kakao.maps.StaticMap(container, {
-      center: new kakao.maps.LatLng(centerLat, centerLng),
+    
+    // StaticMap 옵션 설정
+    const staticMapOptions = {
+      center: staticCenter,
       level: level,
       marker: [
-        { position: new kakao.maps.LatLng(centerLat, centerLng) }
+        { position: staticCenter } // 현장 중심 마커 표시
       ]
-    });
+    };
 
-    // ✅ html2canvas로 캡처
+    // 정적 지도 객체 생성 (CORS 문제 없이 이미지로 렌더링됨)
+    const staticMap = new kakao.maps.StaticMap(container, staticMapOptions);
+
+    // ✅ html2canvas를 이용한 캡처 이벤트
     document.getElementById('captureBtn').addEventListener('click', async () => {
-      const mapElement = document.getElementById('map');
-      const canvas = await html2canvas(mapElement, { useCORS: true });
-      const image = canvas.toDataURL('image/png');
+      const targetElement = document.getElementById('map-container');
+      
+      try {
+        const canvas = await html2canvas(targetElement, { 
+          useCORS: true,       // 크로스오리진 리소스 허용
+          scale: 2             // 고해상도 출력을 위해 스케일 2배 적용
+        });
+        
+        const image = canvas.toDataURL('image/png');
 
-      // 자동 다운로드
-      const link = document.createElement('a');
-      link.download = `kakao_map_capture_${Date.now()}.png`;
-      link.href = image;
-      link.click();
+        // 자동 다운로드 링크 생성
+        const link = document.createElement('a');
+        link.download = `tree_survey_map_${Date.now()}.png`;
+        link.link = image;
+        link.href = image;
+        link.click();
+      } catch (error) {
+        alert('캡처 중 오류가 발생했습니다: ' + error);
+      }
     });
   </script>
 </body>
