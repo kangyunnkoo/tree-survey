@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>아파트 수목조사용 지도 출력 및 캡처</title>
+  <title>아파트 수목조사용 지도 - 세로 출력 최적화</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -16,7 +16,7 @@
       margin-bottom: 10px;
     }
 
-    /* 지도 출력 영역 */
+    /* 화면용 지도 영역 */
     #map-container {
       width: 1200px;
       height: 900px;
@@ -58,67 +58,99 @@
       margin-top: 10px;
     }
 
-    /* 인쇄(프린트/PDF 저장) 전용 스타일: 지도 외 불필요한 요소 숨김 및 여백 최적화 */
+    /* 🖨️ 세로(Portrait) 인쇄 전용 CSS */
+    @page {
+      size: A4 portrait; /* A4 용지 세로 방향 설정 */
+      margin: 0;         /* 인쇄 여백 제거하여 지도 영역 극대화 */
+    }
+
     @media print {
-      body {
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0 !important;
+        padding: 0 !important;
         background: white;
-        padding: 0;
-        margin: 0;
       }
+
+      /* 지도 이외의 UI 요소 숨기기 */
       h2, .btn-group, p {
         display: none !important;
       }
+
+      /* 세로 A4 한 페이지에 잘림 없이 꽉 차도록 설정 */
       #map-container {
-        width: 100% !important;
+        width: 100vw !important;
         height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
         border: none !important;
         box-shadow: none !important;
         margin: 0 !important;
         border-radius: 0 !important;
+      }
+
+      #map {
+        width: 100% !important;
+        height: 100% !important;
       }
     }
   </style>
 </head>
 <body>
 
-  <h2>📍 아파트 수목조사용 지도</h2>
+  <h2>📍 아파트 수목조사용 지도 (세로 출력)</h2>
   
   <div id="map-container">
     <div id="map"></div>
   </div>
 
   <div class="btn-group">
-    <!-- html2canvas 대신 브라우저의 고품질 인쇄/PDF 저장 기능을 활용합니다 -->
-    <button class="action-btn" onclick="window.print()">🖨️ 지도 인쇄 및 PDF 저장하기</button>
+    <button class="action-btn" onclick="printMap()">🖨️ 세로 지도 인쇄 / PDF 저장</button>
   </div>
-  <p><b>인쇄 및 PDF 저장하기</b>를 누른 후, 프린터 대상에서 <b>'PDF로 저장'</b>을 선택하시면 가장 깨끗한 고화질 이미지/문서로 저장됩니다.</p>
+  <p>버튼을 누르면 세로 방향 A4 사이즈로 지도가 잘림 없이 깔끔하게 출력됩니다.</p>
 
   <!-- ✅ 카카오맵 JS SDK -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
 
   <script>
-    // URL 파라미터 파싱 (기본값: 서울시청, 현장 환경에 맞춰 위경도 전달 가능)
     const params = new URLSearchParams(window.location.search);
     const centerLat = parseFloat(params.get("centerLat")) || 37.5665;
     const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
     const level = parseInt(params.get("level")) || 3;
 
-    // 카카오맵 생성 옵션
     const container = document.getElementById('map');
     const options = {
       center: new kakao.maps.LatLng(centerLat, centerLng),
       level: level
     };
 
-    // 카카오 동적 지도 생성
     const map = new kakao.maps.Map(container, options);
 
-    // 현장 중심 마커 표시
+    // 마커 추가
     const markerPosition = new kakao.maps.LatLng(centerLat, centerLng);
     const marker = new kakao.maps.Marker({
       position: markerPosition
     });
     marker.setMap(map);
+
+    // 인쇄 실행 함수 (인쇄 직전 레이아웃 재정렬을 수행하여 잘림 방지)
+    function printMap() {
+      // 1. 인쇄 레이아웃에 맞춰 지도 재계산
+      map.relayout();
+      map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
+      
+      // 2. 인쇄 실행
+      setTimeout(() => {
+        window.print();
+      }, 300);
+    }
+
+    // 브라우저 기본 인쇄(Ctrl+P) 시에도 지도 레이아웃 재정렬 처리
+    window.onbeforeprint = function() {
+      map.relayout();
+      map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
+    };
   </script>
 </body>
 </html>
