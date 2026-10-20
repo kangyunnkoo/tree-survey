@@ -2,40 +2,57 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>아파트 수목조사용 지도 - 출력 방향 선택 및 뷰 사이즈 조절</title>
+  <title>아파트 수목조사용 지도 - 커스텀 뷰 및 정밀 인쇄</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       text-align: center;
       background: #f9f9f9;
       margin: 0;
-      padding: 2rem;
+      padding: 1.5rem;
     }
     
     h2 {
       margin-bottom: 5px;
     }
 
-    /* 🎛️ 지도 뷰 사이즈 조절 컨트롤러 영역 */
+    /* 🎛️ 지도 뷰 사이즈 조절 및 커스텀 입력 컨트롤러 영역 */
     .size-control-group {
       margin-bottom: 15px;
       display: flex;
       justify-content: center;
       align-items: center;
       gap: 10px;
+      flex-wrap: wrap;
     }
     .size-control-group label {
       font-size: 0.95rem;
       font-weight: bold;
       color: #333;
     }
-    .size-control-group select {
-      padding: 6px 12px;
+    .size-control-group select, .size-control-group input {
+      padding: 6px 10px;
       font-size: 0.95rem;
       border-radius: 4px;
       border: 1px solid #ccc;
       background-color: #fff;
+    }
+    .size-control-group input {
+      width: 70px;
+      text-align: center;
+    }
+    .apply-btn {
+      padding: 6px 12px;
+      font-size: 0.9rem;
+      background-color: #607D8B;
+      color: white;
+      border: none;
+      border-radius: 4px;
       cursor: pointer;
+      font-weight: bold;
+    }
+    .apply-btn:hover {
+      background-color: #455A64;
     }
 
     /* 화면 기본 지도 크기 (동적으로 변경됨) */
@@ -49,7 +66,7 @@
       background: #ffffff;
       position: relative;
       overflow: hidden;
-      transition: width 0.3s ease, height 0.3s ease; /* 부드러운 사이즈 변경 효과 */
+      transition: width 0.2s ease, height 0.2s ease;
     }
 
     #map {
@@ -93,23 +110,27 @@
       margin-top: 10px;
     }
 
-    /* 🖨️ 기본 인쇄 공통 스타일 */
+    /* 🖨️ 정밀 인쇄 전용 스타일: 오직 #map-container 내부만 출력되도록 설정 */
     @media print {
+      /* 페이지 여백 및 배경 초기화 */
       html, body {
         width: 100%;
         height: 100%;
         margin: 0 !important;
         padding: 0 !important;
-        background: white;
+        background: white !important;
       }
 
-      /* 지도 외 화면 UI 숨김 (타이틀, 사이즈 조절바, 버튼 등) */
-      h2, .size-control-group, .btn-group, p {
+      /* 지도 외 모든 UI 요소(타이틀, 조절바, 버튼, 안내문) 완벽 숨김 */
+      body > *:not(#map-container) {
         display: none !important;
       }
 
-      /* 인쇄 시 지도 영역을 용지에 딱 맞게 보정 */
+      /* 인쇄 대상인 지도 컨테이너를 용지에 꽉 차게 밀착 */
       #map-container {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
         width: 100vw !important;
         height: 100vh !important;
         max-width: none !important;
@@ -118,6 +139,7 @@
         box-shadow: none !important;
         margin: 0 !important;
         border-radius: 0 !important;
+        z-index: 9999 !important;
       }
 
       #map {
@@ -139,16 +161,24 @@
 
   <h2>📍 아파트 수목조사용 지도</h2>
 
-  <!-- 📐 지도 View 사이즈 조절 UI 추가 -->
+  <!-- 📐 지도 View 사이즈 선택 및 커스텀 입력 UI -->
   <div class="size-control-group">
-    <label for="mapSizePreset">🔍 지도 뷰 사이즈 조절:</label>
-    <select id="mapSizePreset" onchange="changeMapSize(this.value)">
+    <label for="mapSizePreset">🔍 뷰 프리셋:</label>
+    <select id="mapSizePreset" onchange="handlePresetChange(this.value)">
       <option value="1200x800">기본 (1200 × 800)</option>
       <option value="1000x600">중형 (1000 × 600)</option>
       <option value="800x500">소형 (800 × 500)</option>
       <option value="1400x900">대형 (1400 × 900)</option>
-      <option value="fullscreen">화면 꽉 채우기 (Full)</option>
+      <option value="custom" selected>커스텀 직접 입력</option>
     </select>
+
+    <label for="customWidth" style="margin-left: 10px;">가로(px):</label>
+    <input type="number" id="customWidth" value="1200" min="400" max="3000">
+
+    <label for="customHeight">세로(px):</label>
+    <input type="number" id="customHeight" value="800" min="300" max="3000">
+
+    <button class="apply-btn" onclick="applyCustomSize()">크기 적용</button>
   </div>
   
   <div id="map-container">
@@ -159,7 +189,7 @@
     <button class="action-btn" onclick="printMap('portrait')">📱 세로 방향 인쇄 / PDF</button>
     <button class="action-btn landscape-btn" onclick="printMap('landscape')">🖥️ 가로 방향 인쇄 / PDF</button>
   </div>
-  <p>원하시는 출력 방향 버튼을 누르시면, 잘림 없이 한 페이지에 지도 전체가 꽉 차도록 자동 조절됩니다.</p>
+  <p>원하시는 출력 방향 버튼을 누르시면, 지도 뷰 영역 내용이 오직 정확하게 인쇄물에 반영됩니다.</p>
 
   <!-- ✅ 카카오맵 JS SDK -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
@@ -185,24 +215,32 @@
     });
     marker.setMap(map);
 
-    // 📐 지도 View 사이즈 변경 함수
-    function changeMapSize(preset) {
+    // 📐 프리셋 변경 시 입력창 값 연동
+    function handlePresetChange(value) {
+      if (value === 'custom') return;
+      const [w, h] = value.split('x');
+      document.getElementById('customWidth').value = w;
+      document.getElementById('customHeight').value = h;
+      applySize(w, h);
+    }
+
+    // 📐 커스텀 크기 적용 버튼 클릭 시
+    function applyCustomSize() {
+      const w = document.getElementById('customWidth').value;
+      const h = document.getElementById('customHeight').value;
+      applySize(w, h);
+    }
+
+    // 공통 사이즈 적용 및 맵 갱신 함수
+    function applySize(w, h) {
       const mapContainer = document.getElementById('map-container');
+      mapContainer.style.width = w + 'px';
+      mapContainer.style.height = h + 'px';
 
-      if (preset === 'fullscreen') {
-        mapContainer.style.width = '100%';
-        mapContainer.style.height = '85vh';
-      } else {
-        const [w, h] = preset.split('x');
-        mapContainer.style.width = w + 'px';
-        mapContainer.style.height = h + 'px';
-      }
-
-      // 사이즈 변경 후 카카오맵 레이아웃 재계산 및 중심 맞춤
       setTimeout(() => {
         map.relayout();
         map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
-      }, 300);
+      }, 200);
     }
 
     // 🖨️ 가로/세로 방향 선택 인쇄 처리 함수
@@ -210,24 +248,20 @@
       const styleTag = document.getElementById('print-orientation-style');
       
       if (orientation === 'landscape') {
-        // 가로 방향 인쇄 설정
         styleTag.innerHTML = `@page { size: A4 landscape; margin: 0; }`;
       } else {
-        // 세로 방향 인쇄 설정
         styleTag.innerHTML = `@page { size: A4 portrait; margin: 0; }`;
       }
 
-      // 1. 변경된 인쇄 크기에 맞춰 카카오맵 중심 좌표 및 타일 레이아웃 재정렬
+      // 인쇄 전 맵 레이아웃 최신화
       map.relayout();
       map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
 
-      // 2. 레이아웃 재배치가 완료된 후 인쇄 창 실행
       setTimeout(() => {
         window.print();
       }, 300);
     }
 
-    // Ctrl+P 등 단축키로 기본 인쇄 시 지도 레이아웃 깨짐 방지
     window.onbeforeprint = function() {
       map.relayout();
       map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
