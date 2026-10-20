@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>아파트 수목조사용 지도 - 세로 출력 최적화</title>
+  <title>아파트 수목조사용 지도 - 출력 방향 선택 지원</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -16,10 +16,10 @@
       margin-bottom: 10px;
     }
 
-    /* 화면용 지도 영역 */
+    /* 화면 기본 지도 크기 (화면용) */
     #map-container {
       width: 1200px;
-      height: 900px;
+      height: 800px;
       margin: 0 auto;
       border: 2px solid #333;
       border-radius: 8px;
@@ -34,23 +34,35 @@
       height: 100%;
     }
 
+    /* 버튼 컨트롤 영역 */
     .btn-group {
       margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
     }
 
     .action-btn {
       padding: 12px 24px;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       background-color: #4CAF50;
       color: white;
       border: none;
       border-radius: 5px;
       cursor: pointer;
       font-weight: bold;
-      margin: 0 5px;
+      transition: background-color 0.2s;
     }
     .action-btn:hover {
       background-color: #45a049;
+    }
+
+    .landscape-btn {
+      background-color: #2196F3;
+    }
+    .landscape-btn:hover {
+      background-color: #0b7dda;
     }
 
     p {
@@ -58,12 +70,7 @@
       margin-top: 10px;
     }
 
-    /* 🖨️ 세로(Portrait) 인쇄 전용 CSS */
-    @page {
-      size: A4 portrait; /* A4 용지 세로 방향 설정 */
-      margin: 0;         /* 인쇄 여백 제거하여 지도 영역 극대화 */
-    }
-
+    /* 🖨️ 기본 인쇄 공통 스타일 */
     @media print {
       html, body {
         width: 100%;
@@ -73,12 +80,12 @@
         background: white;
       }
 
-      /* 지도 이외의 UI 요소 숨기기 */
+      /* 지도 외 화면 UI 숨김 */
       h2, .btn-group, p {
         display: none !important;
       }
 
-      /* 세로 A4 한 페이지에 잘림 없이 꽉 차도록 설정 */
+      /* 인쇄 시 지도 영역을 용지에 딱 맞게 보정 */
       #map-container {
         width: 100vw !important;
         height: 100vh !important;
@@ -96,19 +103,28 @@
       }
     }
   </style>
+
+  <!-- 인쇄 방향을 동적으로 결정하는 CSS 태그 -->
+  <style id="print-orientation-style">
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+  </style>
 </head>
 <body>
 
-  <h2>📍 아파트 수목조사용 지도 (세로 출력)</h2>
+  <h2>📍 아파트 수목조사용 지도</h2>
   
   <div id="map-container">
     <div id="map"></div>
   </div>
 
   <div class="btn-group">
-    <button class="action-btn" onclick="printMap()">🖨️ 세로 지도 인쇄 / PDF 저장</button>
+    <button class="action-btn" onclick="printMap('portrait')">📱 세로 방향 인쇄 / PDF</button>
+    <button class="action-btn landscape-btn" onclick="printMap('landscape')">🖥️ 가로 방향 인쇄 / PDF</button>
   </div>
-  <p>버튼을 누르면 세로 방향 A4 사이즈로 지도가 잘림 없이 깔끔하게 출력됩니다.</p>
+  <p>원하시는 출력 방향 버튼을 누르시면, 잘림 없이 한 페이지에 지도 전체가 꽉 차도록 자동 조절됩니다.</p>
 
   <!-- ✅ 카카오맵 JS SDK -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
@@ -127,26 +143,36 @@
 
     const map = new kakao.maps.Map(container, options);
 
-    // 마커 추가
+    // 현장 중심 마커
     const markerPosition = new kakao.maps.LatLng(centerLat, centerLng);
     const marker = new kakao.maps.Marker({
       position: markerPosition
     });
     marker.setMap(map);
 
-    // 인쇄 실행 함수 (인쇄 직전 레이아웃 재정렬을 수행하여 잘림 방지)
-    function printMap() {
-      // 1. 인쇄 레이아웃에 맞춰 지도 재계산
+    // 🖨️ 가로/세로 방향 선택 인쇄 처리 함수
+    function printMap(orientation) {
+      const styleTag = document.getElementById('print-orientation-style');
+      
+      if (orientation === 'landscape') {
+        // 가로 방향 인쇄 설정
+        styleTag.innerHTML = `@page { size: A4 landscape; margin: 0; }`;
+      } else {
+        // 세로 방향 인쇄 설정
+        styleTag.innerHTML = `@page { size: A4 portrait; margin: 0; }`;
+      }
+
+      // 1. 변경된 인쇄 크기에 맞춰 카카오맵 중심 좌표 및 타일 레이아웃 재정렬
       map.relayout();
       map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
-      
-      // 2. 인쇄 실행
+
+      // 2. 레이아웃 재배치가 완료된 후 인쇄 창 실행
       setTimeout(() => {
         window.print();
       }, 300);
     }
 
-    // 브라우저 기본 인쇄(Ctrl+P) 시에도 지도 레이아웃 재정렬 처리
+    // Ctrl+P 등 단축키로 기본 인쇄 시 지도 레이아웃 깨짐 방지
     window.onbeforeprint = function() {
       map.relayout();
       map.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
