@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <title>수목 위치도</title>
   <style>
-    /* 화면 전체를 가득 채우고 스크롤 제거 */
+    /* 화면 전체를 가득 채우고 스크롤 제거 (배경을 흰색으로 수정하여 까만 화면 방지) */
     html, body {
       margin: 0;
       padding: 0;
       width: 100vw;
       height: 100vh;
       overflow: hidden;
-      background-color: #000;
+      background-color: #ffffff;
     }
 
     #map-wrapper {
@@ -236,7 +236,6 @@
     // 6. 역회전 및 줌 배율 대응 마커 이미지 생성 (Canvas)
     // -------------------------------------------------------------
     function createNumberMarker(num, mapAngle = 0, zoomed2X = true) {
-      // 선택된 드롭다운 크기(targetScreenSize)를 기준으로 지도 배율에 맞춰 반영
       const displaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
       const scale = 2; // 고해상도 레티나 보정
 
@@ -265,4 +264,98 @@
 
       // 텍스트 출력
       ctx.fillStyle = "#ffffff";
-      const fontSize = displaySize * 0.52
+      const fontSize = displaySize * 0.52;
+      ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      ctx.fillText(num, 0, 0.2);
+
+      const imageSize = new kakao.maps.Size(displaySize, displaySize);
+      const imageOption = {
+        offset: new kakao.maps.Point(displaySize / 2, displaySize / 2)
+      };
+
+      return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
+    }
+
+    // -------------------------------------------------------------
+    // 7. CSV 데이터 로드 및 마커 생성
+    // -------------------------------------------------------------
+    function parseCSV(text) {
+      const rows = text.trim().split("\n").map(line => {
+        const matches = line.match(/("([^"]|"")*"|[^,]+)(?=,|$)/g);
+        return matches ? matches.map(s => s.replace(/^"|"$/g, "")) : [];
+      });
+      return rows;
+    }
+
+    async function loadCSV() {
+      if (!csvUrl) return [];
+      try {
+        const res = await fetch(csvUrl);
+        if (!res.ok) throw new Error("Network response was not ok");
+        const text = await res.text();
+        const rows = parseCSV(text);
+
+        return rows.slice(1).map(r => ({
+          no: r[0],
+          name: r[1],
+          status: r[2],
+          lat: parseFloat(r[3]),
+          lng: parseFloat(r[4])
+        }));
+      } catch (e) {
+        console.error("CSV 로드 실패:", e);
+        return [];
+      }
+    }
+
+    async function drawMarkers() {
+      const data = await loadCSV();
+
+      data.forEach((row) => {
+        if (isNaN(row.lat) || isNaN(row.lng)) return;
+        
+        const markerImage = createNumberMarker(row.no, currentAngle, isZoomed2X);
+        const marker = new kakao.maps.Marker({
+          position: new kakao.maps.LatLng(row.lat, row.lng),
+          image: markerImage,
+          map: map
+        });
+
+        // 추적 목록에 저장
+        markerList.push({
+          no: row.no,
+          marker: marker
+        });
+
+        const infowindow = new kakao.maps.InfoWindow({
+          content: `<div style="padding:5px; white-space:nowrap;">${row.name}-${row.status}</div>`
+        });
+
+        kakao.maps.event.addListener(marker, "click", () => {
+          if (currentInfoWindow === infowindow) {
+            infowindow.close();
+            currentInfoWindow = null;
+          } else {
+            if (currentInfoWindow) {
+              currentInfoWindow.close();
+            }
+            infowindow.open(map, marker);
+            currentInfoWindow = infowindow;
+          }
+        });
+      });
+    }
+
+    // 초기 레이아웃 재배치 및 지정된 파라미터 중심좌표 고정
+    setTimeout(() => {
+      map.relayout();
+      map.setCenter(initialCenter);
+    }, 200);
+
+    drawMarkers();
+  </script>
+</body>
+</html>
