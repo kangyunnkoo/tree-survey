@@ -22,37 +22,49 @@
     }
 
     /* 
-      100% 크기에서 transform: scale(2) 및 회전 적용
+      100% 크기에서 scale(줌 배율) 및 회전 적용
       transform-origin: center center로 정중앙 기준 변형
     */
     #map {
       width: 100%;
       height: 100%;
-      transform: scale(2) rotate(var(--map-rotate, 0deg));
+      transform: scale(var(--map-scale, 2)) rotate(var(--map-rotate, 0deg));
       transform-origin: center center;
       transition: transform 0.3s ease;
     }
 
-    /* 우측 상단 회전 버튼 */
-    #rotate-btn {
+    /* 우측 상단 컨트롤 버튼 그룹 스타일 */
+    .control-group {
       position: absolute;
       top: 15px;
       right: 15px;
       z-index: 10;
+      display: flex;
+      gap: 8px;
+    }
+
+    .map-btn {
       background: #ffffff;
       color: #333333;
       border: 1px solid #cccccc;
-      padding: 8px 14px;
+      padding: 8px 12px;
       border-radius: 6px;
       font-size: 13px;
       font-weight: bold;
       cursor: pointer;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
       user-select: none;
+      outline: none;
     }
 
-    #rotate-btn:hover {
+    .map-btn:hover {
       background: #f0f0f0;
+    }
+
+    .map-btn.active {
+      background-color: #0d47a1;
+      color: white;
+      border-color: #0d47a1;
     }
   </style>
   <!-- 카카오맵 JS SDK -->
@@ -60,7 +72,11 @@
 </head>
 <body>
   <div id="map-wrapper">
-    <button id="rotate-btn" onclick="rotateMap()">↻ 90° 회전 (현재 0°)</button>
+    <!-- 우측 상단 제어 버튼 영역 -->
+    <div class="control-group">
+      <button id="zoom-btn" class="map-btn active" onclick="toggleZoom()">2배 확대 (ON)</button>
+      <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
+    </div>
     <div id="map"></div>
   </div>
 
@@ -111,7 +127,36 @@
     });
 
     // -------------------------------------------------------------
-    // 3. 지도 회전 및 마커 역회전 제어
+    // 3. 2배 확대 / 원래 화면 토글 제어
+    // -------------------------------------------------------------
+    let isZoomed2X = true; // 기본값 2배 확대 상태
+
+    function toggleZoom() {
+      const visualCenter = map.getCenter();
+      const mapEl = document.getElementById("map");
+      const zoomBtn = document.getElementById("zoom-btn");
+
+      isZoomed2X = !isZoomed2X;
+
+      if (isZoomed2X) {
+        mapEl.style.setProperty("--map-scale", "2");
+        zoomBtn.textContent = "2배 확대 (ON)";
+        zoomBtn.classList.add("active");
+      } else {
+        mapEl.style.setProperty("--map-scale", "1");
+        zoomBtn.textContent = "원래 화면 (OFF)";
+        zoomBtn.classList.remove("active");
+      }
+
+      // 화면 크기 변경 후 레이아웃 재배치 및 중심 좌표 유지
+      setTimeout(() => {
+        map.relayout();
+        map.setCenter(visualCenter);
+      }, 300);
+    }
+
+    // -------------------------------------------------------------
+    // 4. 지도 회전 및 마커 역회전 제어
     // -------------------------------------------------------------
     let currentAngle = 0;
 
@@ -124,7 +169,7 @@
       
       // CSS 변수로 지도 회전 적용
       mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
-      document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (현재 ${currentAngle}°)`;
+      document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (${currentAngle}°)`;
 
       // 회전 상태일 때는 오동작 방지를 위해 기본 드래그 비활성화, 0도 복귀 시 드래그 재활성화
       if (currentAngle !== 0) {
@@ -152,7 +197,7 @@
     }
 
     // -------------------------------------------------------------
-    // 4. 역회전 적용 마커 이미지 생성 (Canvas)
+    // 5. 역회전 적용 마커 이미지 생성 (Canvas)
     // -------------------------------------------------------------
     function createNumberMarker(num, mapAngle = 0) {
       const displaySize = 10;
@@ -199,7 +244,7 @@
     }
 
     // -------------------------------------------------------------
-    // 5. CSV 데이터 로드 및 마커 생성
+    // 6. CSV 데이터 로드 및 마커 생성
     // -------------------------------------------------------------
     function parseCSV(text) {
       const rows = text.trim().split("\n").map(line => {
@@ -210,17 +255,23 @@
     }
 
     async function loadCSV() {
-      const res = await fetch(csvUrl);
-      const text = await res.text();
-      const rows = parseCSV(text);
+      if (!csvUrl) return [];
+      try {
+        const res = await fetch(csvUrl);
+        const text = await res.text();
+        const rows = parseCSV(text);
 
-      return rows.slice(1).map(r => ({
-        no: r[0],
-        name: r[1],
-        status: r[2],
-        lat: parseFloat(r[3]),
-        lng: parseFloat(r[4])
-      }));
+        return rows.slice(1).map(r => ({
+          no: r[0],
+          name: r[1],
+          status: r[2],
+          lat: parseFloat(r[3]),
+          lng: parseFloat(r[4])
+        }));
+      } catch (e) {
+        console.error("CSV 로드 실패:", e);
+        return [];
+      }
     }
 
     async function drawMarkers() {
