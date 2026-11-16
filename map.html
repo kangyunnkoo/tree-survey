@@ -33,17 +33,20 @@
       transition: transform 0.3s ease;
     }
 
-    /* 우측 상단 컨트롤 버튼 그룹 스타일 */
+    /* 우측 상단 컨트롤 버튼 및 옵션 그룹 스타일 (세로 배치) */
     .control-group {
       position: absolute;
       top: 15px;
       right: 15px;
       z-index: 10;
       display: flex;
+      flex-direction: column;
+      align-items: flex-end;
       gap: 8px;
+      width: 170px;
     }
 
-    .map-btn {
+    .map-btn, .map-select {
       background: #ffffff;
       color: #333333;
       border: 1px solid #cccccc;
@@ -55,9 +58,22 @@
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
       user-select: none;
       outline: none;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
     }
 
-    .map-btn:hover {
+    .map-select {
+      text-align-last: center;
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 14px;
+      padding-right: 25px;
+    }
+
+    .map-btn:hover, .map-select:hover {
       background: #f0f0f0;
     }
 
@@ -72,10 +88,16 @@
 </head>
 <body>
   <div id="map-wrapper">
-    <!-- 우측 상단 제어 버튼 영역 -->
+    <!-- 우측 상단 제어 버튼 및 옵션 영역 (위에서 아래로 세로 배치) -->
     <div class="control-group">
       <button id="zoom-btn" class="map-btn active" onclick="toggleZoom()">2배 확대 (ON)</button>
       <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
+      <select id="marker-size-select" class="map-select" onchange="changeMarkerSize()">
+        <option value="16">원크기: 작게</option>
+        <option value="20" selected>원크기: 보통</option>
+        <option value="26">원크기: 크게</option>
+        <option value="32">원크기: 아주 크게</option>
+      </select>
     </div>
     <div id="map"></div>
   </div>
@@ -191,6 +213,17 @@
       }, 300);
     }
 
+    // -------------------------------------------------------------
+    // 5. 원숫자 사이즈 변경 제어
+    // -------------------------------------------------------------
+    let targetScreenSize = 20; // 기본 화면상 크기 (px)
+
+    function changeMarkerSize() {
+      const selectEl = document.getElementById("marker-size-select");
+      targetScreenSize = parseInt(selectEl.value, 10);
+      updateMarkersRotation(currentAngle, isZoomed2X);
+    }
+
     // 마커 역회전 및 크기 일괄 업데이트
     function updateMarkersRotation(mapAngle, zoomed2X) {
       markerList.forEach(item => {
@@ -200,11 +233,10 @@
     }
 
     // -------------------------------------------------------------
-    // 5. 역회전 및 줌 배율 대응 마커 이미지 생성 (Canvas)
+    // 6. 역회전 및 줌 배율 대응 마커 이미지 생성 (Canvas)
     // -------------------------------------------------------------
     function createNumberMarker(num, mapAngle = 0, zoomed2X = true) {
-      // 지도 배율(scale)이 변해도 화면상에서 원 숫자 크기가 일정하게 유지되도록 반비례 적용
-      const targetScreenSize = 20; // 화면상에 표시될 고정 픽셀 크기
+      // 선택된 드롭다운 크기(targetScreenSize)를 기준으로 지도 배율에 맞춰 반영
       const displaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
       const scale = 2; // 고해상도 레티나 보정
 
@@ -233,95 +265,4 @@
 
       // 텍스트 출력
       ctx.fillStyle = "#ffffff";
-      const fontSize = displaySize * 0.55;
-      ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      ctx.fillText(num, 0, 0.2);
-
-      const imageSize = new kakao.maps.Size(displaySize, displaySize);
-      const imageOption = {
-        offset: new kakao.maps.Point(displaySize / 2, displaySize / 2)
-      };
-
-      return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
-    }
-
-    // -------------------------------------------------------------
-    // 6. CSV 데이터 로드 및 마커 생성
-    // -------------------------------------------------------------
-    function parseCSV(text) {
-      const rows = text.trim().split("\n").map(line => {
-        const matches = line.match(/("([^"]|"")*"|[^,]+)(?=,|$)/g);
-        return matches ? matches.map(s => s.replace(/^"|"$/g, "")) : [];
-      });
-      return rows;
-    }
-
-    async function loadCSV() {
-      if (!csvUrl) return [];
-      try {
-        const res = await fetch(csvUrl);
-        const text = await res.text();
-        const rows = parseCSV(text);
-
-        return rows.slice(1).map(r => ({
-          no: r[0],
-          name: r[1],
-          status: r[2],
-          lat: parseFloat(r[3]),
-          lng: parseFloat(r[4])
-        }));
-      } catch (e) {
-        console.error("CSV 로드 실패:", e);
-        return [];
-      }
-    }
-
-    async function drawMarkers() {
-      const data = await loadCSV();
-
-      data.forEach((row) => {
-        const markerImage = createNumberMarker(row.no, currentAngle, isZoomed2X);
-        const marker = new kakao.maps.Marker({
-          position: new kakao.maps.LatLng(row.lat, row.lng),
-          image: markerImage,
-          map: map
-        });
-
-        // 추적 목록에 저장
-        markerList.push({
-          no: row.no,
-          marker: marker
-        });
-
-        const infowindow = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px; white-space:nowrap;">${row.name}-${row.status}</div>`
-        });
-
-        kakao.maps.event.addListener(marker, "click", () => {
-          if (currentInfoWindow === infowindow) {
-            infowindow.close();
-            currentInfoWindow = null;
-          } else {
-            if (currentInfoWindow) {
-              currentInfoWindow.close();
-            }
-            infowindow.open(map, marker);
-            currentInfoWindow = infowindow;
-          }
-        });
-      });
-    }
-
-    // 초기 레이아웃 재배치 및 지정된 파라미터 중심좌표 고정
-    setTimeout(() => {
-      map.relayout();
-      map.setCenter(initialCenter);
-    }, 200);
-
-    drawMarkers();
-  </script>
-</body>
-</html>
+      const fontSize = displaySize * 0.52
