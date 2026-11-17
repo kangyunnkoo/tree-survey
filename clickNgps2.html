@@ -3,13 +3,26 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>수목 위치 선택 및 노션 DB 전송</title>
+    <title>나무주사목 위치 선택 및 노션 DB 전송</title>
     <style>
-        html, body { margin:0; padding:0; height:100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        }
         
+        /* 맵 컨테이너와 패널이 화면을 정확히 나눠 가지도록 플렉스박스 구조 적용 */
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+
         #map-wrapper {
             width: 100%;
-            height: 74%;
+            flex: 1;
             overflow: hidden;
             position: relative;
         }
@@ -43,14 +56,40 @@
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
             user-select: none;
         }
-
         #zoom-toggle-btn.active {
             background: #007bff;
             color: #ffffff;
             border-color: #0056b3;
         }
 
-        /* 1/2 축소 원번호 마커 커스텀 오버레이 (14px x 14px) */
+        /* 오른쪽 중앙 나침반 토글 버튼 스타일 */
+        #compass-btn {
+            position: absolute;
+            top: 50%;
+            right: 12px;
+            transform: translateY(-50%);
+            z-index: 10;
+            background: #ffffff;
+            color: #1c7ed6;
+            border: 2px solid #1c7ed6;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+            user-select: none;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        #compass-btn.active {
+            background: #1c7ed6;
+            color: #ffffff;
+        }
+
+        /* 수목 저장 완료된 원번호 마커 (초록색) */
         .number-badge {
             display: flex;
             align-items: center;
@@ -70,10 +109,35 @@
         }
         .number-badge:active { transform: scale(1.2); }
 
-        /* 하단 컴팩트 수목 정보 입력 패널 */
+        /* 내 위치 실시간 방향 화살표 마커 (파란색) */
+        .my-location-badge {
+            width: 14px;
+            height: 14px;
+            background-color: #1c7ed6;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .my-location-badge::after {
+            content: '';
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-bottom: 7px solid #ffffff;
+            position: absolute;
+            top: -5px;
+        }
+
+        /* 하단 입력 패널 높이 고정 (190px) */
         #panel {
-            height: 26%;
-            padding: 8px 10px;
+            width: 100%;
+            height: 190px;
+            flex-shrink: 0;
             background: #ffffff;
             border-top: 1px solid #ccc;
             box-sizing: border-box;
@@ -81,17 +145,44 @@
             z-index: 10;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
+            transition: height 0.3s ease;
         }
+        #panel.collapsed { height: 36px; }
+
+        #panel-toggle-bar {
+            height: 36px;
+            background: #f1f3f5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #495057;
+            cursor: pointer;
+            border-bottom: 1px solid #dee2e6;
+            user-select: none;
+        }
+
+        #panel-body {
+            flex: 1;
+            padding: 6px 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        #panel.collapsed #panel-body { display: none; }
 
         .input-row { display: flex; gap: 6px; }
         .combo-box { display: flex; flex: 1.2; gap: 3px; }
 
-        input, select, button { 
-            width: 100%; height: 34px; font-size: 13px; 
+        input, select { 
+            width: 100%; height: 36px; font-size: 13px; 
             border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; padding: 0 8px;
         }
-        input[readonly] { background-color: #f5f5f5; color: #666; }
+        input[readonly] { background-color: #f5f5f5; color: #666; height: 28px; font-size: 11px; }
 
         .select-quick {
             width: 36px; min-width: 36px; padding: 0 2px; text-align: center;
@@ -99,12 +190,12 @@
         }
 
         .btn-send { 
+            width: 100%; height: 38px; font-size: 14px;
             background-color: #2b8a3e; color: white; font-weight: bold; 
-            border: none; font-size: 14px; cursor: pointer; height: 34px;
+            border: none; border-radius: 6px; cursor: pointer;
         }
         .btn-send:disabled { background-color: #82c91e; cursor: not-allowed; }
 
-        /* 초슬림 최근 전송 및 정보 디스플레이 영역 */
         #last-sent-box {
             padding: 4px 8px;
             background-color: #f0fdf4;
@@ -130,57 +221,49 @@
 <body>
     <div id="map-wrapper">
         <button id="zoom-toggle-btn">🔍 2배 확대 ON/OFF</button>
+        <!-- 오른쪽 중앙 나침반 방향 토글 버튼 -->
+        <button id="compass-btn" onclick="toggleCompassMode()" title="실시간 시선 방향 및 위치 표시 토글">🧭</button>
         <div id="map"></div>
     </div>
     
-    <div id="panel">
-        <!-- 1행: 번호 + 수종(입력창 + 가나다순 퀵선택) -->
-        <div class="input-row">
-            <input type="text" id="treeId" placeholder="번호 (예: 101)" style="flex: 0.8;">
-            <div class="combo-box">
-                <input type="text" id="species" placeholder="수종 직접 입력">
-                <select class="select-quick" onchange="applyQuickValue('species', this)">
-                    <option value="">▼</option>
-                    <option value="배롱나무">배롱나무</option>
-                    <option value="벚나무류">벚나무류</option>
-                    <option value="산딸나무">산딸나무</option>
-                    <option value="산수유">산수유</option>
-                    <option value="소나무(반송)">소나무(반송)</option>
-                    <option value="소나무(장송)">소나무(장송)</option>
-                    <option value="왕벚나무">왕벚나무</option>
-                    <option value="전나무">전나무</option>
-                    <option value="철쭉류">철쭉류</option>
-                    <option value="팽나무">팽나무</option>
-                    <option value="회양목">회양목</option>
-                </select>
-            </div>
+    <div id="panel" class="">
+        <div id="panel-toggle-bar" onclick="togglePanel()">
+            <span>🌳 수목 조사 입력폼</span>
+            <span id="toggle-arrow">▲ 폼 숨기기</span>
         </div>
 
-        <!-- 2행: 주수 + 상태(입력창 + 지정순 퀵선택) -->
-        <div class="input-row">
-            <input type="number" id="quantity" placeholder="주수 (예: 1)" style="flex: 0.8;">
-            <div class="combo-box">
-                <input type="text" id="status" placeholder="상태 직접 입력">
-                <select class="select-quick" onchange="applyQuickValue('status', this)">
-                    <option value="">▼</option>
-                    <option value="고사">고사</option>
-                    <option value="수간부후()">수간부후()</option>
-                    <option value="가지고사()">가지고사()</option>
-                    <option value="심식">심식</option>
-                    <option value="수세위약">수세위약</option>
-                </select>
+        <div id="panel-body">
+            <!-- 1행: 번호 + 수종 -->
+            <div class="input-row">
+                <input type="text" id="treeId" placeholder="번호 (예: 101)" style="flex: 0.8;">
+                <div class="combo-box">
+                    <input type="text" id="species" placeholder="수종 직접 입력">
+                    <select id="species-select" class="select-quick" onchange="applyQuickValue('species', this)">
+                        <option value="">▼</option>
+                    </select>
+                </div>
             </div>
-        </div>
 
-        <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요" style="height:28px; font-size:12px;">
-        <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
+            <!-- 2행: 주수 + 상태 -->
+            <div class="input-row">
+                <input type="number" id="quantity" placeholder="주수 (예: 1)" style="flex: 0.8;">
+                <div class="combo-box">
+                    <input type="text" id="status" placeholder="상태 직접 입력">
+                    <select id="status-select" class="select-quick" onchange="applyQuickValue('status', this)">
+                        <option value="">▼</option>
+                    </select>
+                </div>
+            </div>
 
-        <!-- 정보 디스플레이 및 재전송 박스 -->
-        <div id="last-sent-box">
-            <div class="last-sent-header">
-                <strong id="status-title" style="color: #2b8a3e;">[선택 정보]</strong>
-                <span id="last-sent-info">-</span>
-                <button class="btn-resend" onclick="resendToNotion()">↻ 재전송</button>
+            <input type="text" id="coords" readonly placeholder="지도를 터치하여 위치를 지정하세요">
+            <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 전송</button>
+
+            <div id="last-sent-box">
+                <div class="last-sent-header">
+                    <strong id="status-title" style="color: #2b8a3e;">[선택 정보]</strong>
+                    <span id="last-sent-info">-</span>
+                    <button class="btn-resend" onclick="resendToNotion()">↻ 재전송</button>
+                </div>
             </div>
         </div>
     </div>
@@ -199,19 +282,117 @@
             };
             const map = new kakao.maps.Map(mapContainer, mapOptions);
 
-            let activeMarker = null; // 선택 위치용 임시 핀 마커
+            let activeMarker = null; 
+            let myLocationOverlay = null; 
+            let myLocationEl = null;
             let selectedCoords = null;
             let isZoomed = false;
 
             let isDragging = false;
             let startX = 0, startY = 0;
+            
+            let isCompassActive = false;
+            let watchId = null;
 
             const zoomBtn = document.getElementById("zoom-toggle-btn");
+            const compassBtn = document.getElementById("compass-btn");
             const mapWrapper = document.getElementById("map-wrapper");
-            const webhookUrl = "https://hook.eu2.make.com/by8xkdrp85r5m6pu9f6vq7bj5f81yhr1";
+            const webhookUrl = "https://hook.eu2.make.com/mayg8iuujzutftye9q0ntf6uw91zubi4";
             let lastPayload = null;
 
-            // 1. 2배 확대 토글 버튼
+            function updateMyLocation(lat, lng, heading) {
+                const locPosition = new kakao.maps.LatLng(lat, lng);
+
+                if (!myLocationOverlay) {
+                    myLocationEl = document.createElement('div');
+                    myLocationEl.className = 'my-location-badge';
+
+                    myLocationOverlay = new kakao.maps.CustomOverlay({
+                        position: locPosition,
+                        content: myLocationEl,
+                        xAnchor: 0.5,
+                        yAnchor: 0.5,
+                        zIndex: 5
+                    });
+                    myLocationOverlay.setMap(map);
+                } else {
+                    myLocationOverlay.setPosition(locPosition);
+                }
+
+                if (heading !== null && !isNaN(heading) && myLocationEl) {
+                    myLocationEl.style.transform = `rotate(${heading}deg)`;
+                }
+            }
+
+            window.toggleCompassMode = function() {
+                isCompassActive = !isCompassActive;
+
+                if (isCompassActive) {
+                    compassBtn.classList.add("active");
+                    
+                    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                        DeviceOrientationEvent.requestPermission().then(response => {
+                            if (response === 'granted') {
+                                window.addEventListener('deviceorientation', handleOrientation, true);
+                            }
+                        }).catch(console.error);
+                    } else if (window.DeviceOrientationEvent) {
+                        window.addEventListener('deviceorientation', handleOrientation, true);
+                    }
+
+                    if (navigator.geolocation) {
+                        watchId = navigator.geolocation.watchPosition(function(position) {
+                            const lat = position.coords.latitude;
+                            const lng = position.coords.longitude;
+                            updateMyLocation(lat, lng, null);
+                            map.setCenter(new kakao.maps.LatLng(lat, lng));
+                        }, null, { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
+                    }
+                } else {
+                    compassBtn.classList.remove("active");
+
+                    if (watchId !== null) {
+                        navigator.geolocation.clearWatch(watchId);
+                        watchId = null;
+                    }
+                    if (window.DeviceOrientationEvent) {
+                        window.removeEventListener('deviceorientation', handleOrientation, true);
+                    }
+
+                    if (myLocationOverlay) {
+                        myLocationOverlay.setMap(null);
+                        myLocationOverlay = null;
+                        myLocationEl = null;
+                    }
+                }
+            };
+
+            function handleOrientation(event) {
+                let heading = null;
+                if (event.webkitCompassHeading) {
+                    heading = event.webkitCompassHeading;
+                } else if (event.alpha) {
+                    heading = 360 - event.alpha;
+                }
+
+                if (heading !== null && myLocationEl) {
+                    myLocationEl.style.transform = `rotate(${heading}deg)`;
+                }
+            }
+
+            window.togglePanel = function() {
+                const panel = document.getElementById('panel');
+                const toggleArrow = document.getElementById('toggle-arrow');
+                
+                panel.classList.toggle('collapsed');
+                if (panel.classList.contains('collapsed')) {
+                    toggleArrow.textContent = "▼ 폼 펼치기";
+                } else {
+                    toggleArrow.textContent = "▲ 폼 숨기기";
+                }
+                setTimeout(() => { map.relayout(); }, 200);
+            };
+
             zoomBtn.addEventListener("click", function() {
                 isZoomed = !isZoomed;
                 const currentCenter = map.getCenter();
@@ -232,7 +413,6 @@
                 }, 200);
             });
 
-            // 2. 퀵 선택 함수
             window.applyQuickValue = function(fieldId, selectObj) {
                 if (selectObj.value) {
                     document.getElementById(fieldId).value = selectObj.value;
@@ -240,7 +420,28 @@
                 }
             };
 
-            // 3. 드래그 판단 이벤트
+            function learnNewOptions(species, status) {
+                if (species) addOptionIfNotExists('species-select', species);
+                if (status) addOptionIfNotExists('status-select', status);
+            }
+
+            function addOptionIfNotExists(selectId, value) {
+                const selectElem = document.getElementById(selectId);
+                let exists = false;
+                for (let i = 0; i < selectElem.options.length; i++) {
+                    if (selectElem.options[i].value === value) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    const opt = document.createElement('option');
+                    opt.value = value;
+                    opt.text = value;
+                    selectElem.appendChild(opt);
+                }
+            }
+
             mapWrapper.addEventListener('mousedown', function(e) {
                 isDragging = false; startX = e.clientX; startY = e.clientY;
             });
@@ -258,7 +459,6 @@
                 }
             });
 
-            // 4. 지도 클릭 시 좌표 정밀 변환 처리
             mapContainer.addEventListener('click', function(e) {
                 if (isDragging) { isDragging = false; return; }
 
@@ -281,22 +481,16 @@
                     selectedCoords = { lat: latlng.getLat(), lng: latlng.getLng() };
                     
                     if (!activeMarker) {
-                        activeMarker = new kakao.maps.Marker({ 
-                            position: latlng, 
-                            map: map 
-                        });
+                        activeMarker = new kakao.maps.Marker({ position: latlng, map: map });
                     } else {
                         activeMarker.setPosition(latlng);
-                        if (!activeMarker.getMap()) {
-                            activeMarker.setMap(map);
-                        }
+                        if (!activeMarker.getMap()) activeMarker.setMap(map);
                     }
 
                     document.getElementById("coords").value = `선택 좌표: ${selectedCoords.lat.toFixed(6)}, ${selectedCoords.lng.toFixed(6)}`;
                 }
             });
 
-            // 5. 노션 DB 전송 함수
             window.sendToNotion = function() {
                 const treeId = document.getElementById('treeId').value;
                 const quantity = document.getElementById('quantity').value;
@@ -321,7 +515,6 @@
                 executeFetch(lastPayload);
             };
 
-            // 6. 서버 전송 및 원번호 오버레이 생성
             function executeFetch(payload) {
                 const sendBtn = document.getElementById('sendBtn');
                 sendBtn.disabled = true;
@@ -340,10 +533,9 @@
                     if (data && data.status === "success") {
                         alert('노션 DB에 정상적으로 데이터가 입력되었습니다!');
                         
-                        // ① 축소된 원번호 마커 생성
                         createCircleNumberMarker(payload);
+                        learnNewOptions(payload.species, payload.status);
 
-                        // ② 선택용 임시 핀 마커 제거
                         if (activeMarker) {
                             activeMarker.setMap(null);
                             activeMarker = null;
@@ -351,7 +543,6 @@
 
                         updateDisplayBox(payload, true, '[저장 성공]');
 
-                        // ③ 입력 폼 초기화
                         document.getElementById('treeId').value = '';
                         document.getElementById('quantity').value = '';
                         document.getElementById('species').value = '';
@@ -372,7 +563,6 @@
                 });
             }
 
-            // 원번호 커스텀 오버레이 생성 및 디스플레이 박스 연결
             function createCircleNumberMarker(payload) {
                 const position = new kakao.maps.LatLng(payload.lat, payload.lng);
 
@@ -389,14 +579,11 @@
                 });
                 customOverlay.setMap(map);
 
-                // 원번호 클릭 시 하단 디스플레이 박스에 해당 정보 표시
                 function handleOverlayClick(e) {
                     if (e) {
                         if (e.stopPropagation) e.stopPropagation();
                         if (e.preventDefault) e.preventDefault();
                     }
-
-                    // 선택된 마커의 데이터를 최근 상태로 업데이트하고 박스 출력
                     lastPayload = payload;
                     updateDisplayBox(payload, true, `[No. ${payload.tree_id} 조회]`);
                 }
@@ -407,7 +594,6 @@
                 content.addEventListener('touchstart', function(e) { e.stopPropagation(); });
             }
 
-            // 하단 디스플레이 박스 업데이트 함수
             function updateDisplayBox(payload, isSuccess, titleText) {
                 const displayBox = document.getElementById('last-sent-box');
                 const statusTitle = document.getElementById('status-title');
