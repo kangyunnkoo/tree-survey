@@ -349,65 +349,70 @@
         }
 
         // -------------------------------------------------------------
-        // 6. 마커 이미지 생성 (원번호 + 오른쪽 파란색 주수)
+        // 6. 마커 이미지 생성 (원번호 중심 고정 + 오른쪽 주수 배치)
         // -------------------------------------------------------------
         function createNumberMarker(num, quantity, mapAngle = 0, zoomed2X = false) {
-            const baseDisplaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
+            const circleSize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
             const scale = 2; 
 
             const canvas = document.createElement("canvas");
             const ctx = canvas.getContext("2d");
 
-            const tempFontSize = baseDisplaySize * 0.45;
-            ctx.font = `bold ${tempFontSize}px 'Malgun Gothic', Arial, sans-serif`;
-            
+            // 1. 주수 텍스트 크기 및 너비 측정
             const subText = quantity ? ` (${quantity})` : "";
-            const textMetrics = ctx.measureText(num + subText);
-            
-            const dynamicWidth = baseDisplaySize + textMetrics.width + 12;
-            const dynamicHeight = baseDisplaySize;
+            const subFontSize = circleSize * 0.45;
+            ctx.font = `bold ${subFontSize}px 'Malgun Gothic', Arial, sans-serif`;
+            const subTextMetrics = ctx.measureText(subText);
+            const subTextWidth = subText ? subTextMetrics.width + 2 : 0;
 
-            canvas.width = dynamicWidth * scale;
-            canvas.height = dynamicHeight * scale;
+            // 2. 전체 캔버스 크기 계산 (원의 지름 + 오른쪽 주수 영역)
+            const totalWidth = circleSize + subTextWidth;
+            const totalHeight = circleSize;
+
+            canvas.width = totalWidth * scale;
+            canvas.height = totalHeight * scale;
 
             ctx.scale(scale, scale);
 
-            ctx.translate(dynamicWidth / 2, dynamicHeight / 2);
+            // 3. 중심점을 원의 정중앙으로 설정하여, 원번호 위치가 기존과 정확히 일치하도록 고정
+            ctx.translate(circleSize / 2, totalHeight / 2);
             const rad = (-mapAngle * Math.PI) / 180;
             ctx.rotate(rad);
 
-            const circleRadius = baseDisplaySize / 2;
-            const circleCenterX = -dynamicWidth / 2 + circleRadius;
+            const circleRadius = circleSize / 2;
             
+            // 원형 배경 그리기 (중심 0,0)
             ctx.fillStyle = "#0d47a1";
             ctx.beginPath();
-            ctx.arc(circleCenterX, 0, circleRadius, 0, Math.PI * 2);
+            ctx.arc(0, 0, circleRadius, 0, Math.PI * 2);
             ctx.fill();
 
             ctx.strokeStyle = "#ffffff";
             ctx.lineWidth = 0.8;
             ctx.stroke();
 
+            // 원 내부 숫자 출력
             ctx.fillStyle = "#ffffff";
-            const fontSize = baseDisplaySize * 0.52;
+            const fontSize = circleSize * 0.52;
             ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText(num, circleCenterX, 0.2);
+            ctx.fillText(num, 0, 0.2);
 
+            // 주수 텍스트를 원 오른쪽 외부에 나란히 출력
             if (subText) {
-                const subFontSize = baseDisplaySize * 0.45;
                 ctx.font = `bold ${subFontSize}px 'Malgun Gothic', Arial, sans-serif`;
                 ctx.fillStyle = "blue";
                 ctx.textAlign = "left";
                 ctx.textBaseline = "middle";
-                const textStartX = circleCenterX + circleRadius + 2;
+                const textStartX = circleRadius + 2;
                 ctx.fillText(subText, textStartX, 0.2);
             }
 
-            const imageSize = new kakao.maps.Size(dynamicWidth, dynamicHeight);
+            // 마커 이미지 오프셋을 원의 정중앙(circleSize / 2)으로 지정
+            const imageSize = new kakao.maps.Size(totalWidth, totalHeight);
             const imageOption = {
-                offset: new kakao.maps.Point(dynamicWidth / 2, dynamicHeight / 2)
+                offset: new kakao.maps.Point(circleSize / 2, totalHeight / 2)
             };
 
             return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
