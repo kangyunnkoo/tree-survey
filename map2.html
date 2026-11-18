@@ -107,7 +107,7 @@
     // 1. URL 파라미터 파싱 및 지도 초기화
     // -------------------------------------------------------------
     const params = new URLSearchParams(window.location.search);
-    const csvUrl = params.get("csv");
+    const masterId = params.get("master_id") || "";
     const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본값: 서울시청
     const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
 
@@ -280,39 +280,33 @@
     }
 
     // -------------------------------------------------------------
-    // 7. CSV 데이터 로드 및 마커 생성
+    // 7. 웹훅을 통한 데이터 로드 및 마커 생성 (loadMarkerData)
     // -------------------------------------------------------------
-    function parseCSV(text) {
-      const rows = text.trim().split("\n").map(line => {
-        const matches = line.match(/("([^"]|"")*"|[^,]+)(?=,|$)/g);
-        return matches ? matches.map(s => s.replace(/^"|"$/g, "")) : [];
-      });
-      return rows;
-    }
+    const webhookLoadUrl = "https://hook.eu2.make.com/mayg8iuujzutftye9q0ntf6uw91zubi4"; // 본인의 조회용 웹훅 URL로 교체하세요
 
-    async function loadCSV() {
-      if (!csvUrl) return [];
+    async function loadMarkerData() {
+      if (!masterId) return [];
       try {
-        const res = await fetch(csvUrl);
-        if (!res.ok) throw new Error("Network response was not ok");
-        const text = await res.text();
-        const rows = parseCSV(text);
-
-        return rows.slice(1).map(r => ({
-          no: r[0],
-          name: r[1],
-          status: r[2],
-          lat: parseFloat(r[3]),
-          lng: parseFloat(r[4])
+        const res = await fetch(`${webhookLoadUrl}?master_id=${masterId}`);
+        if (!res.ok) throw new Error("서버 응답 오류");
+        const data = await res.json();
+        
+        // 받아온 JSON 데이터를 지도 마커 규격에 맞게 매핑
+        return data.map(r => ({
+          no: r.tree_id || r.no,
+          species: r.species || '-',
+          quantity: r.quantity || 1,
+          lat: parseFloat(r.lat),
+          lng: parseFloat(r.lng)
         }));
       } catch (e) {
-        console.error("CSV 로드 실패:", e);
+        console.error("데이터 로드 실패:", e);
         return [];
       }
     }
 
     async function drawMarkers() {
-      const data = await loadCSV();
+      const data = await loadMarkerData();
 
       data.forEach((row) => {
         if (isNaN(row.lat) || isNaN(row.lng)) return;
@@ -331,7 +325,7 @@
         });
 
         const infowindow = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px; white-space:nowrap;">${row.name}-${row.status}</div>`
+          content: `<div style="padding:5px; white-space:nowrap;">No.${row.no} (${row.species}/${row.quantity}주)</div>`
         });
 
         kakao.maps.event.addListener(marker, "click", () => {
