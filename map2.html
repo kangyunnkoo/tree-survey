@@ -343,15 +343,15 @@
 
         function updateMarkersRotation(mapAngle, zoomed2X) {
             markerList.forEach(item => {
-                const newImage = createNumberMarker(item.no, item.quantity, mapAngle, zoomed2X);
+                const newImage = createNumberMarker(item.no, item.quantity, item.finished, mapAngle, zoomed2X);
                 item.marker.setImage(newImage);
             });
         }
 
         // -------------------------------------------------------------
-        // 6. 마커 이미지 생성 (원번호 중심 고정 + 오른쪽 주수 배치)
+        // 6. 마커 이미지 생성 (finished 여부에 따른 배경색 분기)
         // -------------------------------------------------------------
-        function createNumberMarker(num, quantity, mapAngle = 0, zoomed2X = false) {
+        function createNumberMarker(num, quantity, finished, mapAngle = 0, zoomed2X = false) {
             const circleSize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
             const scale = 2; 
 
@@ -374,15 +374,15 @@
 
             ctx.scale(scale, scale);
 
-            // 3. 중심점을 원의 정중앙으로 설정하여, 원번호 위치가 기존과 정확히 일치하도록 고정
+            // 3. 중심점을 원의 정중앙으로 설정
             ctx.translate(circleSize / 2, totalHeight / 2);
             const rad = (-mapAngle * Math.PI) / 180;
             ctx.rotate(rad);
 
             const circleRadius = circleSize / 2;
             
-            // 원형 배경 그리기 (중심 0,0)
-            ctx.fillStyle = "#0d47a1";
+            // 원형 배경 그리기 (finished가 true면 선명한 레드 계열, false면 기존 블루 계열)
+            ctx.fillStyle = finished ? "#d32f2f" : "#0d47a1";
             ctx.beginPath();
             ctx.arc(0, 0, circleRadius, 0, Math.PI * 2);
             ctx.fill();
@@ -409,7 +409,6 @@
                 ctx.fillText(subText, textStartX, 0.2);
             }
 
-            // 마커 이미지 오프셋을 원의 정중앙(circleSize / 2)으로 지정
             const imageSize = new kakao.maps.Size(totalWidth, totalHeight);
             const imageOption = {
                 offset: new kakao.maps.Point(circleSize / 2, totalHeight / 2)
@@ -435,7 +434,7 @@
         };
 
         // -------------------------------------------------------------
-        // 8. 데이터 로드 및 마커 생성 (클릭 시 하단 폼에 바인딩)
+        // 8. 데이터 로드 및 마커 생성 (finished 파싱 추가)
         // -------------------------------------------------------------
         async function loadMarkerData() {
             if (!masterId) return [];
@@ -452,6 +451,7 @@
                     no: r.no,
                     species: r.species || '-',
                     quantity: r.quantity || 1,
+                    finished: r.finished === true || r.finished === "true" || r.finished === 1 || r.finished === "1",
                     lat: parseFloat(r.lat),
                     lng: parseFloat(r.lng)
                 }));
@@ -467,7 +467,7 @@
             data.forEach((row) => {
                 if (isNaN(row.lat) || isNaN(row.lng)) return;
                 
-                const markerImage = createNumberMarker(row.no, row.quantity, currentAngle, isZoomed2X);
+                const markerImage = createNumberMarker(row.no, row.quantity, row.finished, currentAngle, isZoomed2X);
                 const marker = new kakao.maps.Marker({
                     position: new kakao.maps.LatLng(row.lat, row.lng),
                     image: markerImage,
@@ -478,6 +478,7 @@
                     no: row.no,
                     quantity: row.quantity,
                     species: row.species,
+                    finished: row.finished,
                     lat: row.lat,
                     lng: row.lng,
                     marker: marker
