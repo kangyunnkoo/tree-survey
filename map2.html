@@ -289,20 +289,17 @@
       try {
         const res = await fetch(`${webhookLoadUrl}?master_id=${masterId}`);
         if (!res.ok) throw new Error("서버 응답 오류");
-
-        const data = await res.json();
-        console.log("서버 응답 데이터:", data); // 콘솔에서 실제 데이터 형태 확인용
-
-        // 만약 데이터가 배열이 아니라면 빈 배열을 반환하거나 배열로 감싸서 에러 방지
-        let dataArray = [];
-        if (Array.isArray(data)) {
-          dataArray = data;
-        } else if (data && typeof data === 'object') {
-          // 객체 형태로 단일 데이터가 오거나 내부에 배열이 포함된 경우 처리
-          dataArray = [data]; 
+        
+        let data = await res.json();
+        
+        // 서버 응답이 문자열 형태일 경우 JSON 객체/배열로 안전하게 변환
+        if (typeof data === 'string') {
+          data = JSON.parse(data);
         }
+        
+        console.log("변환된 데이터 배열:", data);
 
-        return dataArray.map(r => ({
+        return data.map(r => ({
           no: r.no,
           species: r.species || '-',
           quantity: r.quantity || 1,
