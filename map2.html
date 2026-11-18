@@ -1,390 +1,608 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>수목 위치도</title>
-  <style>
-    /* 화면 전체를 가득 채우고 스크롤 제거 (배경을 흰색으로 수정하여 까만 화면 방지) */
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      background-color: #ffffff;
-    }
-
-    #map-wrapper {
-      width: 100%;
-      height: 100%;
-      position: relative;
-      overflow: hidden;
-    }
-
-    /* 
-      100% 크기에서 scale(줌 배율) 및 회전 적용
-      transform-origin: center center로 정중앙 기준 변형
-    */
-    #map {
-      width: 100%;
-      height: 100%;
-      transform: scale(var(--map-scale, 1)) rotate(var(--map-rotate, 0deg));
-      transform-origin: center center;
-      transition: transform 0.3s ease;
-    }
-
-    /* 우측 상단 컨트롤 버튼 및 옵션 그룹 스타일 (세로 배치) */
-    .control-group {
-      position: absolute;
-      top: 15px;
-      right: 15px;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 8px;
-      width: 170px;
-    }
-
-    .map-btn, .map-select {
-      background: #ffffff;
-      color: #333333;
-      border: 1px solid #cccccc;
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: bold;
-      cursor: pointer;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-      user-select: none;
-      outline: none;
-      width: 100%;
-      box-sizing: border-box;
-      text-align: center;
-    }
-
-    .map-select {
-      text-align-last: center;
-      appearance: none;
-      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-      background-repeat: no-repeat;
-      background-position: right 10px center;
-      background-size: 14px;
-      padding-right: 25px;
-    }
-
-    .map-btn:hover, .map-select:hover {
-      background: #f0f0f0;
-    }
-
-    .map-btn.active {
-      background-color: #0d47a1;
-      color: white;
-      border-color: #0d47a1;
-    }
-  </style>
-  <!-- 카카오맵 JS SDK -->
-  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
-</head>
-<body>
-  <div id="map-wrapper">
-    <!-- 우측 상단 제어 버튼 및 옵션 영역 (위에서 아래로 세로 배치) -->
-    <div class="control-group">
-      <button id="zoom-btn" class="map-btn" onclick="toggleZoom()">2배 확대 (OFF)</button>
-      <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
-      <select id="marker-size-select" class="map-select" onchange="changeMarkerSize()">
-        <option value="16">원크기: 작게</option>
-        <option value="20" selected>원크기: 보통</option>
-        <option value="26">원크기: 크게</option>
-        <option value="32">원크기: 아주 크게</option>
-      </select>
-    </div>
-    <div id="map"></div>
-  </div>
-
-  <script>
-    // -------------------------------------------------------------
-    // 1. URL 파라미터 파싱 및 지도 초기화
-    // -------------------------------------------------------------
-    const params = new URLSearchParams(window.location.search);
-    const masterId = params.get("master_id") || "";
-    const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본값: 서울시청
-    const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
-
-    const initialCenter = new kakao.maps.LatLng(centerLat, centerLng);
-
-    const mapContainer = document.getElementById("map");
-    const mapOption = {
-      center: initialCenter,
-      level: 1
-    };
-    const map = new kakao.maps.Map(mapContainer, mapOption);
-
-    // 생성된 마커 객체 추적 배열 (no, quantity 함께 저장)
-    const markerList = [];
-
-    // InfoWindow 추적 관리
-    let currentInfoWindow = null;
-
-    kakao.maps.event.addListener(map, 'click', function() {
-      if (currentInfoWindow) {
-        currentInfoWindow.close();
-        currentInfoWindow = null;
-      }
-    });
-
-    // -------------------------------------------------------------
-    // 2. 확대/축소(Zoom) 시 화면 중심 고정 보정
-    // -------------------------------------------------------------
-    let zoomStartCenter = null;
-
-    kakao.maps.event.addListener(map, 'zoom_start', function() {
-      zoomStartCenter = map.getCenter();
-    });
-
-    kakao.maps.event.addListener(map, 'zoom_changed', function() {
-      if (zoomStartCenter) {
-        map.setCenter(zoomStartCenter);
-      }
-    });
-
-    // -------------------------------------------------------------
-    // 3. 2배 확대 / 원래 화면 토글 제어 (기본값: 원래 화면 / 1배율)
-    // -------------------------------------------------------------
-    let isZoomed2X = false; // 기본값 false (원래 화면)
-
-    function toggleZoom() {
-      const visualCenter = map.getCenter();
-      const mapEl = document.getElementById("map");
-      const zoomBtn = document.getElementById("zoom-btn");
-
-      isZoomed2X = !isZoomed2X;
-
-      if (isZoomed2X) {
-        mapEl.style.setProperty("--map-scale", "2");
-        zoomBtn.textContent = "2배 확대 (ON)";
-        zoomBtn.classList.add("active");
-      } else {
-        mapEl.style.setProperty("--map-scale", "1");
-        zoomBtn.textContent = "2배 확대 (OFF)";
-        zoomBtn.classList.remove("active");
-      }
-
-      // 배율 변경에 맞추어 마커 크기 및 텍스트 재조정
-      updateMarkersRotation(currentAngle, isZoomed2X);
-
-      // 화면 크기 변경 후 레이아웃 재배치 및 중심 좌표 유지
-      setTimeout(() => {
-        map.relayout();
-        map.setCenter(visualCenter);
-      }, 300);
-    }
-
-    // -------------------------------------------------------------
-    // 4. 지도 회전 및 마커 역회전 제어
-    // -------------------------------------------------------------
-    let currentAngle = 0;
-
-    function rotateMap() {
-      // 회전 직전 사용자가 보고 있던 실제 중심 좌표 저장
-      const visualCenter = map.getCenter();
-
-      currentAngle = (currentAngle + 90) % 360;
-      const mapEl = document.getElementById("map");
-      
-      // CSS 변수로 지도 회전 적용
-      mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
-      document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (${currentAngle}°)`;
-
-      // 회전 상태일 때는 오동작 방지를 위해 기본 드래그 비활성화, 0도 복귀 시 드래그 재활성화
-      if (currentAngle !== 0) {
-        map.setDraggable(false);
-      } else {
-        map.setDraggable(true);
-      }
-
-      // 회전 각도 및 현재 줌 배율에 맞춰 모든 마커 재렌더링
-      updateMarkersRotation(currentAngle, isZoomed2X);
-
-      // 회전 트랜지션 완료 후 화면 중앙 위치 유지
-      setTimeout(() => {
-        map.relayout();
-        map.setCenter(visualCenter);
-      }, 300);
-    }
-
-    // -------------------------------------------------------------
-    // 5. 원숫자 사이즈 변경 제어
-    // -------------------------------------------------------------
-    let targetScreenSize = 20; // 기본 화면상 크기 (px)
-
-    function changeMarkerSize() {
-      const selectEl = document.getElementById("marker-size-select");
-      targetScreenSize = parseInt(selectEl.value, 10);
-      updateMarkersRotation(currentAngle, isZoomed2X);
-    }
-
-    // 마커 역회전 및 크기 일괄 업데이트
-    function updateMarkersRotation(mapAngle, zoomed2X) {
-      markerList.forEach(item => {
-        const newImage = createNumberMarker(item.no, item.quantity, mapAngle, zoomed2X);
-        item.marker.setImage(newImage);
-      });
-    }
-
-    // -------------------------------------------------------------
-    // 6. 역회전, 줌 배율 및 주수(오른쪽 파란색 표시) 대응 마커 이미지 생성 (Canvas)
-    // -------------------------------------------------------------
-    function createNumberMarker(num, quantity, mapAngle = 0, zoomed2X = false) {
-      const baseDisplaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
-      const scale = 2; // 고해상도 레티나 보정
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      // 텍스트(" (주수)")가 원 오른쪽에 들어갈 수 있도록 캔버스 너비 동적 확장
-      const tempFontSize = baseDisplaySize * 0.45;
-      ctx.font = `bold ${tempFontSize}px 'Malgun Gothic', Arial, sans-serif`;
-      
-      const subText = quantity ? ` (${quantity})` : "";
-      const textMetrics = ctx.measureText(num + subText);
-      
-      // 원 직경 + 텍스트 너비 + 여백(약 12px)
-      const dynamicWidth = baseDisplaySize + textMetrics.width + 12;
-      const dynamicHeight = baseDisplaySize;
-
-      canvas.width = dynamicWidth * scale;
-      canvas.height = dynamicHeight * scale;
-
-      ctx.scale(scale, scale);
-
-      // 중심점 기준으로 회전 적용
-      ctx.translate(dynamicWidth / 2, dynamicHeight / 2);
-      const rad = (-mapAngle * Math.PI) / 180;
-      ctx.rotate(rad);
-
-      // 원형 배경 (중심 위치 기준)
-      const circleRadius = baseDisplaySize / 2;
-      const circleCenterX = -dynamicWidth / 2 + circleRadius;
-      
-      ctx.fillStyle = "#0d47a1";
-      ctx.beginPath();
-      ctx.arc(circleCenterX, 0, circleRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 테두리 (흰색)
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
-
-      // 원번호 텍스트 출력 (흰색)
-      ctx.fillStyle = "#ffffff";
-      const fontSize = baseDisplaySize * 0.52;
-      ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(num, circleCenterX, 0.2);
-
-      // 오른쪽 주수 텍스트 출력 (파란색 blue 적용)
-      if (subText) {
-        const subFontSize = baseDisplaySize * 0.45; // 원 사이즈 변화에 비례
-        ctx.font = `bold ${subFontSize}px 'Malgun Gothic', Arial, sans-serif`;
-        ctx.fillStyle = "blue"; // 글자 색상 blue 지정
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        // 원 바로 오른쪽(+2px 밀착)에 위치
-        const textStartX = circleCenterX + circleRadius + 2;
-        ctx.fillText(subText, textStartX, 0.2);
-      }
-
-      // 마커 이미지 옵션 (중심점 지정: 전체 캔버스의 정중앙)
-      const imageSize = new kakao.maps.Size(dynamicWidth, dynamicHeight);
-      const imageOption = {
-        offset: new kakao.maps.Point(dynamicWidth / 2, dynamicHeight / 2)
-      };
-
-      return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
-    }
-
-    // -------------------------------------------------------------
-    // 7. 웹훅을 통한 데이터 로드 및 마커 생성 (loadMarkerData)
-    // -------------------------------------------------------------
-    const webhookLoadUrl = "https://hook.eu2.make.com/w53mbrle7l602lux6nfjb9o0qq66c7yi"; // 본인의 조회용 웹훅 URL
-
-    async function loadMarkerData() {
-      if (!masterId) return [];
-      try {
-        const res = await fetch(`${webhookLoadUrl}?master_id=${masterId}`);
-        if (!res.ok) throw new Error("서버 응답 오류");
-        
-        let data = await res.json();
-        
-        // 서버 응답이 문자열 형태일 경우 JSON 객체/배열로 안전하게 변환
-        if (typeof data === 'string') {
-          data = JSON.parse(data);
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>수목 위치도 및 노션 전송</title>
+    <style>
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            overflow: hidden; 
+            background-color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
         }
         
-        console.log("변환된 데이터 배열:", data);
+        body {
+            display: flex;
+            flex-direction: column;
+        }
 
-        return data.map(r => ({
-          no: r.no,
-          species: r.species || '-',
-          quantity: r.quantity || 1,
-          lat: parseFloat(r.lat),
-          lng: parseFloat(r.lng)
-        }));
-      } catch (e) {
-        console.error("데이터 로드 실패:", e);
-        return [];
-      }
-    }
+        #map-wrapper {
+            width: 100%;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
 
-    async function drawMarkers() {
-      const data = await loadMarkerData();
+        /* 100% 크기에서 scale(줌 배율) 및 회전 적용 */
+        #map {
+            width: 100%;
+            height: 100%;
+            transform: scale(var(--map-scale, 1)) rotate(var(--map-rotate, 0deg));
+            transform-origin: center center;
+            transition: transform 0.3s ease;
+        }
 
-      data.forEach((row) => {
-        if (isNaN(row.lat) || isNaN(row.lng)) return;
+        /* 우측 상단 제어 버튼 및 옵션 그룹 스타일 (세로 배치) */
+        .control-group {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+            width: 170px;
+        }
+
+        .map-btn, .map-select {
+            background: #ffffff;
+            color: #333333;
+            border: 1px solid #cccccc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            user-select: none;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        .map-select {
+            text-align-last: center;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 14px;
+            padding-right: 25px;
+        }
+
+        .map-btn:hover, .map-select:hover {
+            background: #f0f0f0;
+        }
+
+        .map-btn.active {
+            background-color: #0d47a1;
+            color: white;
+            border-color: #0d47a1;
+        }
+
+        /* 하단 입력 패널 (한 줄 레이아웃) */
+        #panel {
+            width: 100%;
+            height: 145px;
+            flex-shrink: 0;
+            background: #ffffff;
+            border-top: 1px solid #ccc;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            transition: height 0.3s ease;
+        }
+        #panel.collapsed { height: 36px; }
+
+        #panel-toggle-bar {
+            height: 36px;
+            background: #f1f3f5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #495057;
+            cursor: pointer;
+            border-bottom: 1px solid #dee2e6;
+            user-select: none;
+        }
+
+        #panel-body {
+            flex: 1;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        #panel.collapsed #panel-body { display: none; }
+
+        /* 입력 요소를 한 줄(flex-row)로 배치 */
+        .input-row-inline {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
         
-        const markerImage = createNumberMarker(row.no, row.quantity, currentAngle, isZoomed2X);
-        const marker = new kakao.maps.Marker({
-          position: new kakao.maps.LatLng(row.lat, row.lng),
-          image: markerImage,
-          map: map
+        .combo-box { 
+            display: flex; 
+            flex: 1.3; 
+            gap: 3px; 
+        }
+
+        input, select { 
+            width: 100%; 
+            height: 36px; 
+            font-size: 13px; 
+            border-radius: 6px; 
+            border: 1px solid #ddd; 
+            box-sizing: border-box; 
+            padding: 0 8px;
+        }
+        input[readonly] { 
+            background-color: #f5f5f5; 
+            color: #666; 
+        }
+
+        .select-quick {
+            width: 36px; 
+            min-width: 36px; 
+            padding: 0 2px; 
+            text-align: center;
+            background-color: #f8f9fa; 
+            border-color: #ced4da; 
+            cursor: pointer;
+        }
+
+        .btn-send { 
+            width: 100%; 
+            height: 38px; 
+            font-size: 14px;
+            background-color: #0d47a1; 
+            color: white; 
+            font-weight: bold; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer;
+        }
+        .btn-send:disabled { background-color: #90caf9; cursor: not-allowed; }
+
+        #last-sent-box {
+            padding: 4px 8px;
+            background-color: #f0fdf4;
+            border: 1px solid #2b8a3e;
+            border-radius: 6px;
+            font-size: 11px;
+            color: #222;
+            display: none;
+        }
+        .last-sent-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .btn-resend {
+            background-color: #e03131; 
+            color: white; 
+            font-size: 10px; 
+            font-weight: bold;
+            border: none; 
+            border-radius: 3px; 
+            padding: 1px 5px; 
+            cursor: pointer; 
+            width: auto; 
+            height: auto;
+        }
+    </style>
+    <!-- 카카오맵 JS SDK -->
+    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+</head>
+<body>
+    <div id="map-wrapper">
+        <!-- 우측 상단 제어 버튼 및 옵션 영역 (위에서 아래로 세로 배치) -->
+        <div class="control-group">
+            <button id="zoom-btn" class="map-btn" onclick="toggleZoom()">2배 확대 (OFF)</button>
+            <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
+            <select id="marker-size-select" class="map-select" onchange="changeMarkerSize()">
+                <option value="16">원크기: 작게</option>
+                <option value="20" selected>원크기: 보통</option>
+                <option value="26">원크기: 크게</option>
+                <option value="32">원크기: 아주 크게</option>
+            </select>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <!-- 하단 입력 폼 패널 -->
+    <div id="panel" class="">
+        <div id="panel-toggle-bar" onclick="togglePanel()">
+            <span>🌳 수목 조사 입력 및 노션 전송 폼</span>
+            <span id="toggle-arrow">▲ 폼 숨기기</span>
+        </div>
+
+        <div id="panel-body">
+            <!-- 번호(readonly), 수종(readonly), 주수(입력 가능) 한 줄 배치 -->
+            <div class="input-row-inline">
+                <input type="text" id="treeId" readonly placeholder="번호" style="flex: 0.7;">
+                <input type="text" id="species" readonly placeholder="수종" style="flex: 1.3;">
+                <input type="number" id="quantity" placeholder="주수 수정" style="flex: 0.7;">
+            </div>
+
+            <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 작업완료 전송</button>
+
+            <div id="last-sent-box">
+                <div class="last-sent-header">
+                    <strong id="status-title" style="color: #2b8a3e;">[전송 상태]</strong>
+                    <span id="last-sent-info">-</span>
+                    <button class="btn-resend" onclick="resendToNotion()">↻ 재전송</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // -------------------------------------------------------------
+        // 1. URL 파라미터 파싱 및 지도 초기화
+        // -------------------------------------------------------------
+        const params = new URLSearchParams(window.location.search);
+        const masterId = params.get("master_id") || "";
+        const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본값: 서울시청
+        const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
+
+        const initialCenter = new kakao.maps.LatLng(centerLat, centerLng);
+
+        const mapContainer = document.getElementById("map");
+        const mapOption = {
+            center: initialCenter,
+            level: 1
+        };
+        const map = new kakao.maps.Map(mapContainer, mapOption);
+
+        // 생성된 마커 객체 추적 배열
+        const markerList = [];
+        let lastPayload = null;
+        const webhookLoadUrl = "https://hook.eu2.make.com/w53mbrle7l602lux6nfjb9o0qq66c7yi"; // 조회용 웹훅 URL
+        const webhookSendUrl = "https://hook.eu2.make.com/mayg8iuujzutftye9q0ntf6uw91zubi4"; // 노션 전송용 웹훅 URL (필요시 수정)
+
+        // -------------------------------------------------------------
+        // 2. 확대/축소(Zoom) 시 화면 중심 고정 보정
+        // -------------------------------------------------------------
+        let zoomStartCenter = null;
+
+        kakao.maps.event.addListener(map, 'zoom_start', function() {
+            zoomStartCenter = map.getCenter();
         });
 
-        // 추적 목록에 저장 (no와 quantity 함께 보관)
-        markerList.push({
-          no: row.no,
-          quantity: row.quantity,
-          marker: marker
-        });
-
-        const infowindow = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px; white-space:nowrap;">No.${row.no} (${row.species}/${row.quantity}주)</div>`
-        });
-
-        kakao.maps.event.addListener(marker, "click", () => {
-          if (currentInfoWindow === infowindow) {
-            infowindow.close();
-            currentInfoWindow = null;
-          } else {
-            if (currentInfoWindow) {
-              currentInfoWindow.close();
+        kakao.maps.event.addListener(map, 'zoom_changed', function() {
+            if (zoomStartCenter) {
+                map.setCenter(zoomStartCenter);
             }
-            infowindow.open(map, marker);
-            currentInfoWindow = infowindow;
-          }
         });
-      });
-    }
 
-    // 초기 레이아웃 재배치 및 지정된 파라미터 중심좌표 고정
-    setTimeout(() => {
-      map.relayout();
-      map.setCenter(initialCenter);
-    }, 200);
+        // -------------------------------------------------------------
+        // 3. 2배 확대 / 원래 화면 토글 제어
+        // -------------------------------------------------------------
+        let isZoomed2X = false; 
 
-    drawMarkers();
-  </script>
+        function toggleZoom() {
+            const visualCenter = map.getCenter();
+            const mapEl = document.getElementById("map");
+            const zoomBtn = document.getElementById("zoom-btn");
+
+            isZoomed2X = !isZoomed2X;
+
+            if (isZoomed2X) {
+                mapEl.style.setProperty("--map-scale", "2");
+                zoomBtn.textContent = "2배 확대 (ON)";
+                zoomBtn.classList.add("active");
+            } else {
+                mapEl.style.setProperty("--map-scale", "1");
+                zoomBtn.textContent = "2배 확대 (OFF)";
+                zoomBtn.classList.remove("active");
+            }
+
+            updateMarkersRotation(currentAngle, isZoomed2X);
+
+            setTimeout(() => {
+                map.relayout();
+                map.setCenter(visualCenter);
+            }, 300);
+        }
+
+        // -------------------------------------------------------------
+        // 4. 지도 회전 및 마커 역회전 제어
+        // -------------------------------------------------------------
+        let currentAngle = 0;
+
+        function rotateMap() {
+            const visualCenter = map.getCenter();
+
+            currentAngle = (currentAngle + 90) % 360;
+            const mapEl = document.getElementById("map");
+            
+            mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
+            document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (${currentAngle}°)`;
+
+            if (currentAngle !== 0) {
+                map.setDraggable(false);
+            } else {
+                map.setDraggable(true);
+            }
+
+            updateMarkersRotation(currentAngle, isZoomed2X);
+
+            setTimeout(() => {
+                map.relayout();
+                map.setCenter(visualCenter);
+            }, 300);
+        }
+
+        // -------------------------------------------------------------
+        // 5. 원숫자 사이즈 변경 제어
+        // -------------------------------------------------------------
+        let targetScreenSize = 20; 
+
+        function changeMarkerSize() {
+            const selectEl = document.getElementById("marker-size-select");
+            targetScreenSize = parseInt(selectEl.value, 10);
+            updateMarkersRotation(currentAngle, isZoomed2X);
+        }
+
+        function updateMarkersRotation(mapAngle, zoomed2X) {
+            markerList.forEach(item => {
+                const newImage = createNumberMarker(item.no, item.quantity, mapAngle, zoomed2X);
+                item.marker.setImage(newImage);
+            });
+        }
+
+        // -------------------------------------------------------------
+        // 6. 마커 이미지 생성 (원번호 + 오른쪽 파란색 주수)
+        // -------------------------------------------------------------
+        function createNumberMarker(num, quantity, mapAngle = 0, zoomed2X = false) {
+            const baseDisplaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
+            const scale = 2; 
+
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+
+            const tempFontSize = baseDisplaySize * 0.45;
+            ctx.font = `bold ${tempFontSize}px 'Malgun Gothic', Arial, sans-serif`;
+            
+            const subText = quantity ? ` (${quantity})` : "";
+            const textMetrics = ctx.measureText(num + subText);
+            
+            const dynamicWidth = baseDisplaySize + textMetrics.width + 12;
+            const dynamicHeight = baseDisplaySize;
+
+            canvas.width = dynamicWidth * scale;
+            canvas.height = dynamicHeight * scale;
+
+            ctx.scale(scale, scale);
+
+            ctx.translate(dynamicWidth / 2, dynamicHeight / 2);
+            const rad = (-mapAngle * Math.PI) / 180;
+            ctx.rotate(rad);
+
+            const circleRadius = baseDisplaySize / 2;
+            const circleCenterX = -dynamicWidth / 2 + circleRadius;
+            
+            ctx.fillStyle = "#0d47a1";
+            ctx.beginPath();
+            ctx.arc(circleCenterX, 0, circleRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+
+            ctx.fillStyle = "#ffffff";
+            const fontSize = baseDisplaySize * 0.52;
+            ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(num, circleCenterX, 0.2);
+
+            if (subText) {
+                const subFontSize = baseDisplaySize * 0.45;
+                ctx.font = `bold ${subFontSize}px 'Malgun Gothic', Arial, sans-serif`;
+                ctx.fillStyle = "blue";
+                ctx.textAlign = "left";
+                ctx.textBaseline = "middle";
+                const textStartX = circleCenterX + circleRadius + 2;
+                ctx.fillText(subText, textStartX, 0.2);
+            }
+
+            const imageSize = new kakao.maps.Size(dynamicWidth, dynamicHeight);
+            const imageOption = {
+                offset: new kakao.maps.Point(dynamicWidth / 2, dynamicHeight / 2)
+            };
+
+            return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
+        }
+
+        // -------------------------------------------------------------
+        // 7. 하단 패널 토글 제어
+        // -------------------------------------------------------------
+        window.togglePanel = function() {
+            const panel = document.getElementById('panel');
+            const toggleArrow = document.getElementById('toggle-arrow');
+            
+            panel.classList.toggle('collapsed');
+            if (panel.classList.contains('collapsed')) {
+                toggleArrow.textContent = "▼ 폼 펼치기";
+            } else {
+                toggleArrow.textContent = "▲ 폼 숨기기";
+            }
+            setTimeout(() => { map.relayout(); }, 200);
+        };
+
+        // -------------------------------------------------------------
+        // 8. 데이터 로드 및 마커 생성 (클릭 시 하단 폼에 바인딩)
+        // -------------------------------------------------------------
+        async function loadMarkerData() {
+            if (!masterId) return [];
+            try {
+                const res = await fetch(`${webhookLoadUrl}?master_id=${masterId}`);
+                if (!res.ok) throw new Error("서버 응답 오류");
+                
+                let data = await res.json();
+                if (typeof data === 'string') {
+                    data = JSON.parse(data);
+                }
+
+                return data.map(r => ({
+                    no: r.no,
+                    species: r.species || '-',
+                    quantity: r.quantity || 1,
+                    lat: parseFloat(r.lat),
+                    lng: parseFloat(r.lng)
+                }));
+            } catch (e) {
+                console.error("데이터 로드 실패:", e);
+                return [];
+            }
+        }
+
+        async function drawMarkers() {
+            const data = await loadMarkerData();
+
+            data.forEach((row) => {
+                if (isNaN(row.lat) || isNaN(row.lng)) return;
+                
+                const markerImage = createNumberMarker(row.no, row.quantity, currentAngle, isZoomed2X);
+                const marker = new kakao.maps.Marker({
+                    position: new kakao.maps.LatLng(row.lat, row.lng),
+                    image: markerImage,
+                    map: map
+                });
+
+                markerList.push({
+                    no: row.no,
+                    quantity: row.quantity,
+                    species: row.species,
+                    lat: row.lat,
+                    lng: row.lng,
+                    marker: marker
+                });
+
+                // 마커 클릭 시 인포윈도우 대신 하단 폼에 데이터 입력
+                kakao.maps.event.addListener(marker, "click", () => {
+                    document.getElementById('treeId').value = row.no;
+                    document.getElementById('species').value = row.species;
+                    document.getElementById('quantity').value = row.quantity;
+
+                    // 폼 펼치기 (접혀있을 경우)
+                    const panel = document.getElementById('panel');
+                    if (panel.classList.contains('collapsed')) {
+                        togglePanel();
+                    }
+                });
+            });
+        }
+
+        // -------------------------------------------------------------
+        // 9. 노션 전송 및 재전송 처리
+        // -------------------------------------------------------------
+        window.sendToNotion = function() {
+            const treeId = document.getElementById('treeId').value;
+            const species = document.getElementById('species').value;
+            const quantity = document.getElementById('quantity').value;
+
+            if (!treeId) {
+                alert('마커를 선택하여 번호를 불러와 주세요.');
+                return;
+            }
+
+            // 현재 지도에 등록된 마커 데이터에서 해당 번호의 좌표 찾기
+            const targetItem = markerList.find(item => item.no == treeId);
+
+            lastPayload = {
+                master_id: masterId,
+                tree_id: treeId,
+                species: species,
+                quantity: quantity ? parseInt(quantity) : 1,
+                lat: targetItem ? targetItem.lat : null,
+                lng: targetItem ? targetItem.lng : null
+            };
+
+            executeFetch(lastPayload);
+        };
+
+        function executeFetch(payload) {
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            sendBtn.innerText = "노션 저장 확인 중...";
+
+            fetch(webhookSendUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('서버 응답 오류 (' + response.status + ')');
+                return response.json();
+            .catch(() => ({ status: 'success' })); // 응답 형식이 다를 경우 성공 처리 예외 보완
+            })
+            .then(data => {
+                alert('노션 DB에 작업완료 데이터가 정상적으로 전송되었습니다!');
+                updateDisplayBox(payload, true, '[전송 성공]');
+            })
+            .catch(error => {
+                alert('⚠️ [경고] 노션 전송에 실패했습니다!\n' + error.message + '\n하단의 [재전송] 버튼을 이용해 주세요.');
+                updateDisplayBox(payload, false, '[전송 실패]');
+            })
+            .finally(() => {
+                sendBtn.disabled = false;
+                sendBtn.innerText = "노션 DB로 작업완료 전송";
+            });
+        }
+
+        function updateDisplayBox(payload, isSuccess, titleText) {
+            const displayBox = document.getElementById('last-sent-box');
+            const statusTitle = document.getElementById('status-title');
+            const displayInfo = document.getElementById('last-sent-info');
+
+            if (isSuccess) {
+                displayBox.style.backgroundColor = '#f0fdf4';
+                displayBox.style.borderColor = '#2b8a3e';
+                statusTitle.style.color = '#2b8a3e';
+            } else {
+                displayBox.style.backgroundColor = '#fff5f5';
+                displayBox.style.borderColor = '#e03131';
+                statusTitle.style.color = '#e03131';
+            }
+
+            statusTitle.innerText = titleText;
+            displayInfo.innerHTML = `No.<b>${payload.tree_id}</b> (${payload.species}/${payload.quantity}주)`;
+            displayBox.style.display = 'block';
+        }
+
+        window.resendToNotion = function() {
+            if (!lastPayload) {
+                alert('재전송할 최근 정보가 없습니다.');
+                return;
+            }
+            executeFetch(lastPayload);
+        };
+
+        // 초기 레이아웃 재배치 및 중심좌표 고정
+        setTimeout(() => {
+            map.relayout();
+            map.setCenter(initialCenter);
+        }, 200);
+
+        drawMarkers();
+    </script>
 </body>
 </html>
