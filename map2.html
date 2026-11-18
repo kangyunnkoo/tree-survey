@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>수목 위치도</title>
+  <style>
+    /* 화면 전체를 가득 채우고 스크롤 제거 (배경을 흰색으로 수정하여 까만 화면 방지) */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #ffffff;
+    }
+
+    #map-wrapper {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* 
+      100% 크기에서 scale(줌 배율) 및 회전 적용
+      transform-origin: center center로 정중앙 기준 변형
+    */
+    #map {
+      width: 100%;
+      height: 100%;
+      transform: scale(var(--map-scale, 2)) rotate(var(--map-rotate, 0deg));
+      transform-origin: center center;
+      transition: transform 0.3s ease;
+    }
+
+    /* 우측 상단 컨트롤 버튼 및 옵션 그룹 스타일 (세로 배치) */
+    .control-group {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      width: 170px;
+    }
+
+    .map-btn, .map-select {
+      background: #ffffff;
+      color: #333333;
+      border: 1px solid #cccccc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      user-select: none;
+      outline: none;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    .map-select {
+      text-align-last: center;
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 14px;
+      padding-right: 25px;
+    }
+
+    .map-btn:hover, .map-select:hover {
+      background: #f0f0f0;
+    }
+
+    .map-btn.active {
+      background-color: #0d47a1;
+      color: white;
+      border-color: #0d47a1;
+    }
+  </style>
+  <!-- 카카오맵 JS SDK -->
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4010951d8779c420a474f095fd26c0a6"></script>
+</head>
+<body>
+  <div id="map-wrapper">
+    <!-- 우측 상단 제어 버튼 및 옵션 영역 (위에서 아래로 세로 배치) -->
+    <div class="control-group">
+      <button id="zoom-btn" class="map-btn active" onclick="toggleZoom()">2배 확대 (ON)</button>
+      <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
+      <select id="marker-size-select" class="map-select" onchange="changeMarkerSize()">
+        <option value="16">원크기: 작게</option>
+        <option value="20" selected>원크기: 보통</option>
+        <option value="26">원크기: 크게</option>
+        <option value="32">원크기: 아주 크게</option>
+      </select>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <script>
+    // -------------------------------------------------------------
+    // 1. URL 파라미터 파싱 및 지도 초기화
+    // -------------------------------------------------------------
+    const params = new URLSearchParams(window.location.search);
+    const csvUrl = params.get("csv");
+    const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본값: 서울시청
+    const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
+
+    const initialCenter = new kakao.maps.LatLng(centerLat, centerLng);
+
+    const mapContainer = document.getElementById("map");
+    const mapOption = {
+      center: initialCenter,
+      level: 1
+    };
+    const map = new kakao.maps.Map(mapContainer, mapOption);
+
+    // 생성된 마커 객체 추적 배열
+    const markerList = [];
+
+    // InfoWindow 추적 관리
+    let currentInfoWindow = null;
+
+    kakao.maps.event.addListener(map, 'click', function() {
+      if (currentInfoWindow) {
+        currentInfoWindow.close();
+        currentInfoWindow = null;
+      }
+    });
+
+    // -------------------------------------------------------------
+    // 2. 확대/축소(Zoom) 시 화면 중심 고정 보정
+    // -------------------------------------------------------------
+    let zoomStartCenter = null;
+
+    kakao.maps.event.addListener(map, 'zoom_start', function() {
+      zoomStartCenter = map.getCenter();
+    });
+
+    kakao.maps.event.addListener(map, 'zoom_changed', function() {
+      if (zoomStartCenter) {
+        map.setCenter(zoomStartCenter);
+      }
+    });
+
+    // -------------------------------------------------------------
+    // 3. 2배 확대 / 원래 화면 토글 제어
+    // -------------------------------------------------------------
+    let isZoomed2X = true; // 기본값 2배 확대 상태
+
+    function toggleZoom() {
+      const visualCenter = map.getCenter();
+      const mapEl = document.getElementById("map");
+      const zoomBtn = document.getElementById("zoom-btn");
+
+      isZoomed2X = !isZoomed2X;
+
+      if (isZoomed2X) {
+        mapEl.style.setProperty("--map-scale", "2");
+        zoomBtn.textContent = "2배 확대 (ON)";
+        zoomBtn.classList.add("active");
+      } else {
+        mapEl.style.setProperty("--map-scale", "1");
+        zoomBtn.textContent = "원래 화면 (OFF)";
+        zoomBtn.classList.remove("active");
+      }
+
+      // 배율 변경에 맞추어 마커 크기 재조정
+      updateMarkersRotation(currentAngle, isZoomed2X);
+
+      // 화면 크기 변경 후 레이아웃 재배치 및 중심 좌표 유지
+      setTimeout(() => {
+        map.relayout();
+        map.setCenter(visualCenter);
+      }, 300);
+    }
+
+    // -------------------------------------------------------------
+    // 4. 지도 회전 및 마커 역회전 제어
+    // -------------------------------------------------------------
+    let currentAngle = 0;
+
+    function rotateMap() {
+      // 회전 직전 사용자가 보고 있던 실제 중심 좌표 저장
+      const visualCenter = map.getCenter();
+
+      currentAngle = (currentAngle + 90) % 360;
+      const mapEl = document.getElementById("map");
+      
+      // CSS 변수로 지도 회전 적용
+      mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
+      document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (${currentAngle}°)`;
+
+      // 회전 상태일 때는 오동작 방지를 위해 기본 드래그 비활성화, 0도 복귀 시 드래그 재활성화
+      if (currentAngle !== 0) {
+        map.setDraggable(false);
+      } else {
+        map.setDraggable(true);
+      }
+
+      // 회전 각도 및 현재 줌 배율에 맞춰 모든 마커 재렌더링
+      updateMarkersRotation(currentAngle, isZoomed2X);
+
+      // 회전 트랜지션 완료 후 화면 중앙 위치 유지
+      setTimeout(() => {
+        map.relayout();
+        map.setCenter(visualCenter);
+      }, 300);
+    }
+
+    // -------------------------------------------------------------
+    // 5. 원숫자 사이즈 변경 제어
+    // -------------------------------------------------------------
+    let targetScreenSize = 20; // 기본 화면상 크기 (px)
+
+    function changeMarkerSize() {
+      const selectEl = document.getElementById("marker-size-select");
+      targetScreenSize = parseInt(selectEl.value, 10);
+      updateMarkersRotation(currentAngle, isZoomed2X);
+    }
+
+    // 마커 역회전 및 크기 일괄 업데이트
+    function updateMarkersRotation(mapAngle, zoomed2X) {
+      markerList.forEach(item => {
+        const newImage = createNumberMarker(item.no, mapAngle, zoomed2X);
+        item.marker.setImage(newImage);
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 6. 역회전 및 줌 배율 대응 마커 이미지 생성 (Canvas)
+    // -------------------------------------------------------------
+    function createNumberMarker(num, mapAngle = 0, zoomed2X = true) {
+      const displaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
+      const scale = 2; // 고해상도 레티나 보정
+
+      const canvas = document.createElement("canvas");
+      canvas.width = displaySize * scale;
+      canvas.height = displaySize * scale;
+
+      const ctx = canvas.getContext("2d");
+      ctx.scale(scale, scale);
+
+      // Canvas 중심 기준 지도 회전각의 역방향(-mapAngle) 회전
+      ctx.translate(displaySize / 2, displaySize / 2);
+      const rad = (-mapAngle * Math.PI) / 180;
+      ctx.rotate(rad);
+
+      // 원형 배경 (딥 블루)
+      ctx.fillStyle = "#0d47a1";
+      ctx.beginPath();
+      ctx.arc(0, 0, displaySize / 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 테두리 (흰색)
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      // 텍스트 출력
+      ctx.fillStyle = "#ffffff";
+      const fontSize = displaySize * 0.52;
+      ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      ctx.fillText(num, 0, 0.2);
+
+      const imageSize = new kakao.maps.Size(displaySize, displaySize);
+      const imageOption = {
+        offset: new kakao.maps.Point(displaySize / 2, displaySize / 2)
+      };
+
+      return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
+    }
+
+    // -------------------------------------------------------------
+    // 7. CSV 데이터 로드 및 마커 생성
+    // -------------------------------------------------------------
+    function parseCSV(text) {
+      const rows = text.trim().split("\n").map(line => {
+        const matches = line.match(/("([^"]|"")*"|[^,]+)(?=,|$)/g);
+        return matches ? matches.map(s => s.replace(/^"|"$/g, "")) : [];
+      });
+      return rows;
+    }
+
+    async function loadCSV() {
+      if (!csvUrl) return [];
+      try {
+        const res = await fetch(csvUrl);
+        if (!res.ok) throw new Error("Network response was not ok");
+        const text = await res.text();
+        const rows = parseCSV(text);
+
+        return rows.slice(1).map(r => ({
+          no: r[0],
+          name: r[1],
+          status: r[2],
+          lat: parseFloat(r[3]),
+          lng: parseFloat(r[4])
+        }));
+      } catch (e) {
+        console.error("CSV 로드 실패:", e);
+        return [];
+      }
+    }
+
+    async function drawMarkers() {
+      const data = await loadCSV();
+
+      data.forEach((row) => {
+        if (isNaN(row.lat) || isNaN(row.lng)) return;
+        
+        const markerImage = createNumberMarker(row.no, currentAngle, isZoomed2X);
+        const marker = new kakao.maps.Marker({
+          position: new kakao.maps.LatLng(row.lat, row.lng),
+          image: markerImage,
+          map: map
+        });
+
+        // 추적 목록에 저장
+        markerList.push({
+          no: row.no,
+          marker: marker
+        });
+
+        const infowindow = new kakao.maps.InfoWindow({
+          content: `<div style="padding:5px; white-space:nowrap;">${row.name}-${row.status}</div>`
+        });
+
+        kakao.maps.event.addListener(marker, "click", () => {
+          if (currentInfoWindow === infowindow) {
+            infowindow.close();
+            currentInfoWindow = null;
+          } else {
+            if (currentInfoWindow) {
+              currentInfoWindow.close();
+            }
+            infowindow.open(map, marker);
+            currentInfoWindow = infowindow;
+          }
+        });
+      });
+    }
+
+    // 초기 레이아웃 재배치 및 지정된 파라미터 중심좌표 고정
+    setTimeout(() => {
+      map.relayout();
+      map.setCenter(initialCenter);
+    }, 200);
+
+    drawMarkers();
+  </script>
+</body>
+</html>
