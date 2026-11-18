@@ -86,10 +86,10 @@
             border-color: #0d47a1;
         }
 
-        /* 하단 입력 패널 (한 줄 레이아웃) */
+        /* 하단 입력 패널 (한 줄 레이아웃 컴팩트화) */
         #panel {
             width: 100%;
-            height: 145px;
+            height: 95px;
             flex-shrink: 0;
             background: #ffffff;
             border-top: 1px solid #ccc;
@@ -128,21 +128,14 @@
         }
         #panel.collapsed #panel-body { display: none; }
 
-        /* 입력 요소를 한 줄(flex-row)로 배치 */
+        /* 입력 요소들과 전송 버튼을 한 줄(flex-row)로 배치 */
         .input-row-inline {
             display: flex;
             gap: 6px;
             align-items: center;
         }
-        
-        .combo-box { 
-            display: flex; 
-            flex: 1.3; 
-            gap: 3px; 
-        }
 
-        input, select { 
-            width: 100%; 
+        input { 
             height: 36px; 
             font-size: 13px; 
             border-radius: 6px; 
@@ -155,31 +148,22 @@
             color: #666; 
         }
 
-        .select-quick {
-            width: 36px; 
-            min-width: 36px; 
-            padding: 0 2px; 
-            text-align: center;
-            background-color: #f8f9fa; 
-            border-color: #ced4da; 
-            cursor: pointer;
-        }
-
         .btn-send { 
-            width: 100%; 
-            height: 38px; 
-            font-size: 14px;
+            height: 36px; 
+            font-size: 13px;
             background-color: #0d47a1; 
             color: white; 
             font-weight: bold; 
             border: none; 
             border-radius: 6px; 
             cursor: pointer;
+            white-space: nowrap;
+            padding: 0 12px;
         }
         .btn-send:disabled { background-color: #90caf9; cursor: not-allowed; }
 
         #last-sent-box {
-            padding: 4px 8px;
+            padding: 3px 8px;
             background-color: #f0fdf4;
             border: 1px solid #2b8a3e;
             border-radius: 6px;
@@ -210,7 +194,7 @@
 </head>
 <body>
     <div id="map-wrapper">
-        <!-- 우측 상단 제어 버튼 및 옵션 영역 (위에서 아래로 세로 배치) -->
+        <!-- 우측 상단 제어 버튼 및 옵션 영역 -->
         <div class="control-group">
             <button id="zoom-btn" class="map-btn" onclick="toggleZoom()">2배 확대 (OFF)</button>
             <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
@@ -232,14 +216,13 @@
         </div>
 
         <div id="panel-body">
-            <!-- 번호(readonly), 수종(readonly), 주수(입력 가능) 한 줄 배치 -->
+            <!-- 번호, 수종, 주수, 전송버튼을 모두 한 줄로 배치 -->
             <div class="input-row-inline">
-                <input type="text" id="treeId" readonly placeholder="번호" style="flex: 0.7;">
-                <input type="text" id="species" readonly placeholder="수종" style="flex: 1.3;">
-                <input type="number" id="quantity" placeholder="주수 수정" style="flex: 0.7;">
+                <input type="text" id="treeId" readonly placeholder="번호" style="flex: 0.6;">
+                <input type="text" id="species" readonly placeholder="수종" style="flex: 1.2;">
+                <input type="number" id="quantity" placeholder="주수" style="flex: 0.8;">
+                <button id="sendBtn" class="btn-send" onclick="sendToNotion()" style="flex: 1.2;">작업완료 전송</button>
             </div>
-
-            <button id="sendBtn" class="btn-send" onclick="sendToNotion()">노션 DB로 작업완료 전송</button>
 
             <div id="last-sent-box">
                 <div class="last-sent-header">
@@ -269,11 +252,10 @@
         };
         const map = new kakao.maps.Map(mapContainer, mapOption);
 
-        // 생성된 마커 객체 추적 배열
         const markerList = [];
         let lastPayload = null;
         const webhookLoadUrl = "https://hook.eu2.make.com/w53mbrle7l602lux6nfjb9o0qq66c7yi"; // 조회용 웹훅 URL
-        const webhookSendUrl = "https://hook.eu2.make.com/mayg8iuujzutftye9q0ntf6uw91zubi4"; // 노션 전송용 웹훅 URL (필요시 수정)
+        const webhookSendUrl = "https://hook.eu2.make.com/mayg8iuujzutftye9q0ntf6uw91zubi4"; // 노션 전송용 웹훅 URL
 
         // -------------------------------------------------------------
         // 2. 확대/축소(Zoom) 시 화면 중심 고정 보정
@@ -496,13 +478,12 @@
                     marker: marker
                 });
 
-                // 마커 클릭 시 인포윈도우 대신 하단 폼에 데이터 입력
+                // 마커 클릭 시 하단 폼에 데이터 입력
                 kakao.maps.event.addListener(marker, "click", () => {
                     document.getElementById('treeId').value = row.no;
                     document.getElementById('species').value = row.species;
                     document.getElementById('quantity').value = row.quantity;
 
-                    // 폼 펼치기 (접혀있을 경우)
                     const panel = document.getElementById('panel');
                     if (panel.classList.contains('collapsed')) {
                         togglePanel();
@@ -524,7 +505,6 @@
                 return;
             }
 
-            // 현재 지도에 등록된 마커 데이터에서 해당 번호의 좌표 찾기
             const targetItem = markerList.find(item => item.no == treeId);
 
             lastPayload = {
@@ -542,7 +522,7 @@
         function executeFetch(payload) {
             const sendBtn = document.getElementById('sendBtn');
             sendBtn.disabled = true;
-            sendBtn.innerText = "노션 저장 확인 중...";
+            sendBtn.innerText = "전송 중...";
 
             fetch(webhookSendUrl, {
                 method: 'POST',
@@ -551,8 +531,7 @@
             })
             .then(response => {
                 if (!response.ok) throw new Error('서버 응답 오류 (' + response.status + ')');
-                return response.json();
-            .catch(() => ({ status: 'success' })); // 응답 형식이 다를 경우 성공 처리 예외 보완
+                return response.json().catch(() => ({ status: 'success' }));
             })
             .then(data => {
                 alert('노션 DB에 작업완료 데이터가 정상적으로 전송되었습니다!');
@@ -564,7 +543,7 @@
             })
             .finally(() => {
                 sendBtn.disabled = false;
-                sendBtn.innerText = "노션 DB로 작업완료 전송";
+                sendBtn.innerText = "작업완료 전송";
             });
         }
 
