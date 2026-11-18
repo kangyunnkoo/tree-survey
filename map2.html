@@ -293,7 +293,7 @@
         
         // 받아온 JSON 데이터를 지도 마커 규격에 맞게 매핑
         return data.map(r => ({
-          no: r.tree_id || r.no,
+          no: r.no,
           species: r.species || '-',
           quantity: r.quantity || 1,
           lat: parseFloat(r.lat),
