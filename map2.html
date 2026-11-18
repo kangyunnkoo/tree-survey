@@ -221,7 +221,9 @@
                 <input type="text" id="treeId" readonly placeholder="번호" style="flex: 0.6;">
                 <input type="text" id="species" readonly placeholder="수종" style="flex: 1.2;">
                 <input type="number" id="quantity" placeholder="주수" style="flex: 0.8;">
-                <button id="sendBtn" class="btn-send" onclick="sendToNotion()" style="flex: 1.2;">작업완료 전송</button>
+                <!-- finished 상태를 담는 숨은 필드 추가 -->
+                <input type="hidden" id="finished" value="false">
+                <button id="sendBtn" class="btn-send" onclick="sendToNotion()" style="flex: 1.2;">작업완료</button>
             </div>
 
             <div id="last-sent-box">
@@ -358,14 +360,12 @@
             const canvas = document.createElement("canvas");
             const ctx = canvas.getContext("2d");
 
-            // 1. 주수 텍스트 크기 및 너비 측정
             const subText = quantity ? ` (${quantity})` : "";
             const subFontSize = circleSize * 0.45;
             ctx.font = `bold ${subFontSize}px 'Malgun Gothic', Arial, sans-serif`;
             const subTextMetrics = ctx.measureText(subText);
             const subTextWidth = subText ? subTextMetrics.width + 2 : 0;
 
-            // 2. 전체 캔버스 크기 계산 (원의 지름 + 오른쪽 주수 영역)
             const totalWidth = circleSize + subTextWidth;
             const totalHeight = circleSize;
 
@@ -374,14 +374,13 @@
 
             ctx.scale(scale, scale);
 
-            // 3. 중심점을 원의 정중앙으로 설정
             ctx.translate(circleSize / 2, totalHeight / 2);
             const rad = (-mapAngle * Math.PI) / 180;
             ctx.rotate(rad);
 
             const circleRadius = circleSize / 2;
             
-            // 원형 배경 그리기 (finished가 true면 선명한 레드 계열, false면 기존 블루 계열)
+            // finished가 true면 선명한 레드 계열, false면 기존 블루 계열
             ctx.fillStyle = finished ? "#d32f2f" : "#0d47a1";
             ctx.beginPath();
             ctx.arc(0, 0, circleRadius, 0, Math.PI * 2);
@@ -391,7 +390,6 @@
             ctx.lineWidth = 0.8;
             ctx.stroke();
 
-            // 원 내부 숫자 출력
             ctx.fillStyle = "#ffffff";
             const fontSize = circleSize * 0.52;
             ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
@@ -399,7 +397,6 @@
             ctx.textBaseline = "middle";
             ctx.fillText(num, 0, 0.2);
 
-            // 주수 텍스트를 원 오른쪽 외부에 나란히 출력
             if (subText) {
                 ctx.font = `bold ${subFontSize}px 'Malgun Gothic', Arial, sans-serif`;
                 ctx.fillStyle = "blue";
@@ -434,7 +431,7 @@
         };
 
         // -------------------------------------------------------------
-        // 8. 데이터 로드 및 마커 생성 (finished 파싱 추가)
+        // 8. 데이터 로드 및 마커 생성 (마커 클릭 이벤트 처리)
         // -------------------------------------------------------------
         async function loadMarkerData() {
             if (!masterId) return [];
@@ -484,11 +481,22 @@
                     marker: marker
                 });
 
-                // 마커 클릭 시 하단 폼에 데이터 입력
+                // 마커 클릭 시 하단 폼에 데이터 바인딩 및 finished 상태에 따른 버튼/숨은필드 제어
                 kakao.maps.event.addListener(marker, "click", () => {
                     document.getElementById('treeId').value = row.no;
                     document.getElementById('species').value = row.species;
                     document.getElementById('quantity').value = row.quantity;
+
+                    const sendBtn = document.getElementById('sendBtn');
+                    const finishedInput = document.getElementById('finished');
+
+                    if (row.finished) {
+                        sendBtn.innerText = "작업완료취소";
+                        finishedInput.value = "false";
+                    } else {
+                        sendBtn.innerText = "작업완료";
+                        finishedInput.value = "true";
+                    }
 
                     const panel = document.getElementById('panel');
                     if (panel.classList.contains('collapsed')) {
@@ -505,6 +513,7 @@
             const treeId = document.getElementById('treeId').value;
             const species = document.getElementById('species').value;
             const quantity = document.getElementById('quantity').value;
+            const finishedVal = document.getElementById('finished').value === "true";
 
             if (!treeId) {
                 alert('마커를 선택하여 번호를 불러와 주세요.');
@@ -518,6 +527,7 @@
                 tree_id: treeId,
                 species: species,
                 quantity: quantity ? parseInt(quantity) : 1,
+                finished: finishedVal,
                 lat: targetItem ? targetItem.lat : null,
                 lng: targetItem ? targetItem.lng : null
             };
@@ -527,6 +537,7 @@
 
         function executeFetch(payload) {
             const sendBtn = document.getElementById('sendBtn');
+            const originalText = sendBtn.innerText;
             sendBtn.disabled = true;
             sendBtn.innerText = "전송 중...";
 
@@ -540,7 +551,7 @@
                 return response.json().catch(() => ({ status: 'success' }));
             })
             .then(data => {
-                alert('노션 DB에 작업완료 데이터가 정상적으로 전송되었습니다!');
+                alert('노션 DB에 작업 데이터가 정상적으로 전송되었습니다!');
                 updateDisplayBox(payload, true, '[전송 성공]');
             })
             .catch(error => {
@@ -549,7 +560,7 @@
             })
             .finally(() => {
                 sendBtn.disabled = false;
-                sendBtn.innerText = "작업완료 전송";
+                sendBtn.innerText = originalText;
             });
         }
 
