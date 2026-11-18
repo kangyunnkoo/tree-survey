@@ -22,7 +22,7 @@
     }
 
     /* 
-      기본 1배율(원래 화면)에서 scale(줌 배율) 및 회전 적용
+      100% 크기에서 scale(줌 배율) 및 회전 적용
       transform-origin: center center로 정중앙 기준 변형
     */
     #map {
@@ -90,7 +90,6 @@
   <div id="map-wrapper">
     <!-- 우측 상단 제어 버튼 및 옵션 영역 (위에서 아래로 세로 배치) -->
     <div class="control-group">
-      <!-- 기본값이 원래 화면이므로 버튼 초기 상태는 OFF -->
       <button id="zoom-btn" class="map-btn" onclick="toggleZoom()">2배 확대 (OFF)</button>
       <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
       <select id="marker-size-select" class="map-select" onchange="changeMarkerSize()">
@@ -121,7 +120,7 @@
     };
     const map = new kakao.maps.Map(mapContainer, mapOption);
 
-    // 생성된 마커 객체 추적 배열
+    // 생성된 마커 객체 추적 배열 (no, quantity 함께 저장)
     const markerList = [];
 
     // InfoWindow 추적 관리
@@ -171,7 +170,7 @@
         zoomBtn.classList.remove("active");
       }
 
-      // 배율 변경에 맞추어 마커 크기 재조정
+      // 배율 변경에 맞추어 마커 크기 및 텍스트 재조정
       updateMarkersRotation(currentAngle, isZoomed2X);
 
       // 화면 크기 변경 후 레이아웃 재배치 및 중심 좌표 유지
@@ -228,34 +227,50 @@
     // 마커 역회전 및 크기 일괄 업데이트
     function updateMarkersRotation(mapAngle, zoomed2X) {
       markerList.forEach(item => {
-        const newImage = createNumberMarker(item.no, mapAngle, zoomed2X);
+        const newImage = createNumberMarker(item.no, item.quantity, mapAngle, zoomed2X);
         item.marker.setImage(newImage);
       });
     }
 
     // -------------------------------------------------------------
-    // 6. 역회전 및 줌 배율 대응 마커 이미지 생성 (Canvas)
+    // 6. 역회전, 줌 배율 및 주수(오른쪽 표시) 대응 마커 이미지 생성 (Canvas)
     // -------------------------------------------------------------
-    function createNumberMarker(num, mapAngle = 0, zoomed2X = false) {
-      const displaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
+    function createNumberMarker(num, quantity, mapAngle = 0, zoomed2X = false) {
+      const baseDisplaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
       const scale = 2; // 고해상도 레티나 보정
 
       const canvas = document.createElement("canvas");
-      canvas.width = displaySize * scale;
-      canvas.height = displaySize * scale;
-
       const ctx = canvas.getContext("2d");
+
+      // 텍스트(" (주수)")가 원 오른쪽에 들어갈 수 있도록 캔버스 너비를 여유 있게 확장
+      // 글자 크기에 비례하여 텍스트 영역 확보
+      const tempFontSize = baseDisplaySize * 0.45;
+      ctx.font = `bold ${tempFontSize}px 'Malgun Gothic', Arial, sans-serif`;
+      
+      const subText = quantity ? ` (${quantity})` : "";
+      const textMetrics = ctx.measureText(num + subText);
+      
+      // 원 직경 + 텍스트 너비 + 여백(약 12px)
+      const dynamicWidth = baseDisplaySize + textMetrics.width + 12;
+      const dynamicHeight = baseDisplaySize;
+
+      canvas.width = dynamicWidth * scale;
+      canvas.height = dynamicHeight * scale;
+
       ctx.scale(scale, scale);
 
-      // Canvas 중심 기준 지도 회전각의 역방향(-mapAngle) 회전
-      ctx.translate(displaySize / 2, displaySize / 2);
+      // 중심점 기준으로 회전 적용
+      ctx.translate(dynamicWidth / 2, dynamicHeight / 2);
       const rad = (-mapAngle * Math.PI) / 180;
       ctx.rotate(rad);
 
-      // 원형 배경 (딥 블루)
+      // 원형 배경 (중심 위치 기준: -baseDisplaySize / 2)
+      const circleRadius = baseDisplaySize / 2;
+      const circleCenterX = -dynamicWidth / 2 + circleRadius;
+      
       ctx.fillStyle = "#0d47a1";
       ctx.beginPath();
-      ctx.arc(0, 0, displaySize / 2, 0, Math.PI * 2);
+      ctx.arc(circleCenterX, 0, circleRadius, 0, Math.PI * 2);
       ctx.fill();
 
       // 테두리 (흰색)
@@ -263,18 +278,29 @@
       ctx.lineWidth = 0.8;
       ctx.stroke();
 
-      // 텍스트 출력
+      // 원번호 텍스트 출력
       ctx.fillStyle = "#ffffff";
-      const fontSize = displaySize * 0.52;
+      const fontSize = baseDisplaySize * 0.52;
       ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+      ctx.fillText(num, circleCenterX, 0.2);
 
-      ctx.fillText(num, 0, 0.2);
+      // 오른쪽 주수 텍스트 출력 (원 바로 오른쪽에 위치)
+      if (subText) {
+        const subFontSize = baseDisplaySize * 0.45; // 원 사이즈 변화에 비례
+        ctx.font = `bold ${subFontSize}px 'Malgun Gothic', Arial, sans-serif`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        // 원 오른쪽 끝 좌표 계산 후 약간의 여백(4px) 부여
+        const textStartX = circleCenterX + circleRadius + 4;
+        ctx.fillText(subText, textStartX, 0.2);
+      }
 
-      const imageSize = new kakao.maps.Size(displaySize, displaySize);
+      // 마커 이미지 옵션 (중심점 지정: 전체 캔버스의 정중앙)
+      const imageSize = new kakao.maps.Size(dynamicWidth, dynamicHeight);
       const imageOption = {
-        offset: new kakao.maps.Point(displaySize / 2, displaySize / 2)
+        offset: new kakao.maps.Point(dynamicWidth / 2, dynamicHeight / 2)
       };
 
       return new kakao.maps.MarkerImage(canvas.toDataURL("image/png"), imageSize, imageOption);
@@ -319,16 +345,17 @@
       data.forEach((row) => {
         if (isNaN(row.lat) || isNaN(row.lng)) return;
         
-        const markerImage = createNumberMarker(row.no, currentAngle, isZoomed2X);
+        const markerImage = createNumberMarker(row.no, row.quantity, currentAngle, isZoomed2X);
         const marker = new kakao.maps.Marker({
           position: new kakao.maps.LatLng(row.lat, row.lng),
           image: markerImage,
           map: map
         });
 
-        // 추적 목록에 저장
+        // 추적 목록에 저장 (no와 quantity 함께 보관)
         markerList.push({
           no: row.no,
+          quantity: row.quantity,
           marker: marker
         });
 
