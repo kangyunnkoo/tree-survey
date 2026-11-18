@@ -159,8 +159,9 @@
             cursor: pointer;
             white-space: nowrap;
             padding: 0 12px;
+            transition: background-color 0.2s ease;
         }
-        .btn-send:disabled { background-color: #90caf9; cursor: not-allowed; }
+        .btn-send:disabled { background-color: #90caf9 !important; cursor: not-allowed; }
 
         #last-sent-box {
             padding: 3px 8px;
@@ -221,7 +222,7 @@
                 <input type="text" id="treeId" readonly placeholder="번호" style="flex: 0.6;">
                 <input type="text" id="species" readonly placeholder="수종" style="flex: 1.2;">
                 <input type="number" id="quantity" placeholder="주수" style="flex: 0.8;">
-                <!-- finished 상태를 담는 숨은 필드 추가 -->
+                <!-- finished 상태를 담는 숨은 필드 -->
                 <input type="hidden" id="finished" value="false">
                 <button id="sendBtn" class="btn-send" onclick="sendToNotion()" style="flex: 1.2;">작업완료</button>
             </div>
@@ -380,7 +381,7 @@
 
             const circleRadius = circleSize / 2;
             
-            // finished가 true면 선명한 레드 계열, false면 기존 블루 계열
+            // finished가 true면 선명한 레드 계열(#d32f2f), false면 블루 계열(#0d47a1)
             ctx.fillStyle = finished ? "#d32f2f" : "#0d47a1";
             ctx.beginPath();
             ctx.arc(0, 0, circleRadius, 0, Math.PI * 2);
@@ -481,7 +482,7 @@
                     marker: marker
                 });
 
-                // 마커 클릭 시 하단 폼에 데이터 바인딩 및 finished 상태에 따른 버튼/숨은필드 제어
+                // 마커 클릭 시 하단 폼 바인딩 및 finished 상태에 따른 버튼 라벨, 숨은필드, 배경색 제어
                 kakao.maps.event.addListener(marker, "click", () => {
                     document.getElementById('treeId').value = row.no;
                     document.getElementById('species').value = row.species;
@@ -491,10 +492,12 @@
                     const finishedInput = document.getElementById('finished');
 
                     if (row.finished) {
-                        sendBtn.innerText = "작업완료취소";
+                        sendBtn.innerText = "작업취소";
+                        sendBtn.style.backgroundColor = "#d32f2f"; // 빨간색 계열
                         finishedInput.value = "false";
                     } else {
                         sendBtn.innerText = "작업완료";
+                        sendBtn.style.backgroundColor = "#0d47a1"; // 파란색 계열
                         finishedInput.value = "true";
                     }
 
@@ -538,6 +541,8 @@
         function executeFetch(payload) {
             const sendBtn = document.getElementById('sendBtn');
             const originalText = sendBtn.innerText;
+            const originalBgColor = sendBtn.style.backgroundColor;
+            
             sendBtn.disabled = true;
             sendBtn.innerText = "전송 중...";
 
@@ -561,6 +566,7 @@
             .finally(() => {
                 sendBtn.disabled = false;
                 sendBtn.innerText = originalText;
+                sendBtn.style.backgroundColor = originalBgColor;
             });
         }
 
