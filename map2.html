@@ -233,7 +233,7 @@
     }
 
     // -------------------------------------------------------------
-    // 6. 역회전, 줌 배율 및 주수(오른쪽 표시) 대응 마커 이미지 생성 (Canvas)
+    // 6. 역회전, 줌 배율 및 주수(오른쪽 파란색 표시) 대응 마커 이미지 생성 (Canvas)
     // -------------------------------------------------------------
     function createNumberMarker(num, quantity, mapAngle = 0, zoomed2X = false) {
       const baseDisplaySize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
@@ -242,8 +242,7 @@
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
 
-      // 텍스트(" (주수)")가 원 오른쪽에 들어갈 수 있도록 캔버스 너비를 여유 있게 확장
-      // 글자 크기에 비례하여 텍스트 영역 확보
+      // 텍스트(" (주수)")가 원 오른쪽에 들어갈 수 있도록 캔버스 너비 동적 확장
       const tempFontSize = baseDisplaySize * 0.45;
       ctx.font = `bold ${tempFontSize}px 'Malgun Gothic', Arial, sans-serif`;
       
@@ -264,7 +263,7 @@
       const rad = (-mapAngle * Math.PI) / 180;
       ctx.rotate(rad);
 
-      // 원형 배경 (중심 위치 기준: -baseDisplaySize / 2)
+      // 원형 배경 (중심 위치 기준)
       const circleRadius = baseDisplaySize / 2;
       const circleCenterX = -dynamicWidth / 2 + circleRadius;
       
@@ -278,7 +277,7 @@
       ctx.lineWidth = 0.8;
       ctx.stroke();
 
-      // 원번호 텍스트 출력
+      // 원번호 텍스트 출력 (흰색)
       ctx.fillStyle = "#ffffff";
       const fontSize = baseDisplaySize * 0.52;
       ctx.font = `bold ${fontSize}px 'Malgun Gothic', Arial, sans-serif`;
@@ -286,14 +285,15 @@
       ctx.textBaseline = "middle";
       ctx.fillText(num, circleCenterX, 0.2);
 
-      // 오른쪽 주수 텍스트 출력 (원 바로 오른쪽에 위치)
+      // 오른쪽 주수 텍스트 출력 (파란색 blue 적용)
       if (subText) {
         const subFontSize = baseDisplaySize * 0.45; // 원 사이즈 변화에 비례
         ctx.font = `bold ${subFontSize}px 'Malgun Gothic', Arial, sans-serif`;
+        ctx.fillStyle = "blue"; // 글자 색상 blue 지정
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
-        // 원 오른쪽 끝 좌표 계산 후 약간의 여백(4px) 부여
-        const textStartX = circleCenterX + circleRadius + 4;
+        // 원 바로 오른쪽(+2px 밀착)에 위치
+        const textStartX = circleCenterX + circleRadius + 2;
         ctx.fillText(subText, textStartX, 0.2);
       }
 
