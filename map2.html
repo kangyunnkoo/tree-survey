@@ -27,11 +27,11 @@
             overflow: hidden;
         }
 
-        /* 100% 크기에서 scale(줌 배율) 및 회전 적용 */
+        /* 100% 크기에서 scale(줌 배율) 적용 */
         #map {
             width: 100%;
             height: 100%;
-            transform: scale(var(--map-scale, 1)) rotate(var(--map-rotate, 0deg));
+            transform: scale(var(--map-scale, 1));
             transform-origin: center center;
             transition: transform 0.3s ease;
         }
@@ -239,7 +239,6 @@
         <!-- 우측 상단 제어 버튼, 옵션 및 작업/완료 주수 요약 영역 -->
         <div class="control-group">
             <button id="zoom-btn" class="map-btn" onclick="toggleZoom()">2배 확대 (OFF)</button>
-            <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
             <select id="marker-size-select" class="map-select" onchange="changeMarkerSize()">
                 <option value="16">원크기: 작게</option>
                 <option value="20" selected>원크기: 보통</option>
@@ -356,7 +355,7 @@
                 zoomBtn.classList.remove("active");
             }
 
-            updateMarkersRotation(currentAngle, isZoomed2X);
+            updateMarkersDisplay(isZoomed2X);
 
             setTimeout(() => {
                 map.relayout();
@@ -365,60 +364,32 @@
         }
 
         // -------------------------------------------------------------
-        // 4. 지도 회전 및 마커 역회전 제어
-        // -------------------------------------------------------------
-        let currentAngle = 0;
-
-        function rotateMap() {
-            const visualCenter = map.getCenter();
-
-            currentAngle = (currentAngle + 90) % 360;
-            const mapEl = document.getElementById("map");
-            
-            mapEl.style.setProperty("--map-rotate", `${currentAngle}deg`);
-            document.getElementById("rotate-btn").textContent = `↻ 90° 회전 (${currentAngle}°)`;
-
-            if (currentAngle !== 0) {
-                map.setDraggable(false);
-            } else {
-                map.setDraggable(true);
-            }
-
-            updateMarkersRotation(currentAngle, isZoomed2X);
-
-            setTimeout(() => {
-                map.relayout();
-                map.setCenter(visualCenter);
-            }, 300);
-        }
-
-        // -------------------------------------------------------------
-        // 5. 원숫자 사이즈 변경 제어
+        // 4. 원숫자 사이즈 변경 제어
         // -------------------------------------------------------------
         let targetScreenSize = 20; 
 
         function changeMarkerSize() {
             const selectEl = document.getElementById("marker-size-select");
             targetScreenSize = parseInt(selectEl.value, 10);
-            updateMarkersRotation(currentAngle, isZoomed2X);
+            updateMarkersDisplay(isZoomed2X);
         }
 
-        function updateMarkersRotation(mapAngle, zoomed2X) {
+        function updateMarkersDisplay(zoomed2X) {
             markerList.forEach(item => {
                 const isBlinkingTarget = (activeBlinkItem && activeBlinkItem.no === item.no);
                 let customBg = item.finished ? "#d32f2f" : "#0d47a1";
                 if (isBlinkingTarget) {
                     customBg = item._blinkState ? "#ff9800" : (item.finished ? "#d32f2f" : "#0d47a1");
                 }
-                const newImage = createNumberMarker(item.no, item.quantity, customBg, mapAngle, zoomed2X);
+                const newImage = createNumberMarker(item.no, item.quantity, customBg, zoomed2X);
                 item.marker.setImage(newImage);
             });
         }
 
         // -------------------------------------------------------------
-        // 6. 마커 이미지 생성 (배경색 커스텀 지정 가능)
+        // 5. 마커 이미지 생성 (배경색 커스텀 지정 가능)
         // -------------------------------------------------------------
-        function createNumberMarker(num, quantity, bgColor, mapAngle = 0, zoomed2X = false) {
+        function createNumberMarker(num, quantity, bgColor, zoomed2X = false) {
             const circleSize = zoomed2X ? targetScreenSize / 2 : targetScreenSize;
             const scale = 2; 
 
@@ -440,8 +411,6 @@
             ctx.scale(scale, scale);
 
             ctx.translate(circleSize / 2, totalHeight / 2);
-            const rad = (-mapAngle * Math.PI) / 180;
-            ctx.rotate(rad);
 
             const circleRadius = circleSize / 2;
             
@@ -479,7 +448,7 @@
         }
 
         // -------------------------------------------------------------
-        // 7. 깜빡임 제어 및 폼 버튼 상태 동기화 함수
+        // 6. 깜빡임 제어 및 폼 버튼 상태 동기화 함수
         // -------------------------------------------------------------
         function stopBlinking() {
             if (blinkTimer) {
@@ -489,7 +458,7 @@
             if (activeBlinkItem) {
                 activeBlinkItem._blinkState = false;
                 const normalBg = activeBlinkItem.finished ? "#d32f2f" : "#0d47a1";
-                const normalImage = createNumberMarker(activeBlinkItem.no, activeBlinkItem.quantity, normalBg, currentAngle, isZoomed2X);
+                const normalImage = createNumberMarker(activeBlinkItem.no, activeBlinkItem.quantity, normalBg, isZoomed2X);
                 activeBlinkItem.marker.setImage(normalImage);
                 activeBlinkItem = null;
             }
@@ -504,7 +473,7 @@
                 activeBlinkItem._blinkState = !activeBlinkItem._blinkState;
                 const baseBg = activeBlinkItem.finished ? "#d32f2f" : "#0d47a1";
                 const color = activeBlinkItem._blinkState ? "#ff9800" : baseBg;
-                const blinkImage = createNumberMarker(activeBlinkItem.no, activeBlinkItem.quantity, color, currentAngle, isZoomed2X);
+                const blinkImage = createNumberMarker(activeBlinkItem.no, activeBlinkItem.quantity, color, isZoomed2X);
                 activeBlinkItem.marker.setImage(blinkImage);
             }, 400);
         }
@@ -543,7 +512,7 @@
         }
 
         // -------------------------------------------------------------
-        // 8. 하단 패널 토글 제어
+        // 7. 하단 패널 토글 제어
         // -------------------------------------------------------------
         window.togglePanel = function() {
             const panel = document.getElementById('panel');
@@ -559,7 +528,7 @@
         };
 
         // -------------------------------------------------------------
-        // 9. 데이터 로드 및 마커 생성 (단일 웹훅 action=load 사용)
+        // 8. 데이터 로드 및 마커 생성 (단일 웹훅 action=load 사용)
         // -------------------------------------------------------------
         async function loadMarkerData() {
             if (!masterId) return [];
@@ -597,7 +566,7 @@
                 if (isNaN(row.lat) || isNaN(row.lng)) return;
                 
                 const defaultBg = row.finished ? "#d32f2f" : "#0d47a1";
-                const markerImage = createNumberMarker(row.no, row.quantity, defaultBg, currentAngle, isZoomed2X);
+                const markerImage = createNumberMarker(row.no, row.quantity, defaultBg, isZoomed2X);
                 const marker = new kakao.maps.Marker({
                     position: new kakao.maps.LatLng(row.lat, row.lng),
                     image: markerImage,
@@ -636,7 +605,7 @@
         }
 
         // -------------------------------------------------------------
-        // 10. 노션 전송 및 재전송 처리 (단일 웹훅 action=update 사용)
+        // 9. 노션 전송 및 재전송 처리 (단일 웹훅 action=update 사용)
         // -------------------------------------------------------------
         window.sendToNotion = function() {
             const treeId = document.getElementById('treeId').value;
@@ -688,20 +657,17 @@
                 alert(`노션 DB에 [${actionLabel}] 데이터가 정상적으로 반영되었습니다!`);
                 updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
 
-                // 웹앱 메모리 상의 번호별 완료 상태 및 주수 갱신
                 const target = markerList.find(item => String(item.no) === String(payload.tree_id));
                 if (target) {
                     target.finished = payload.finished;
                     target.quantity = payload.quantity;
                 }
 
-                // 폼 입력값과 버튼을 갱신된 상태(payload.finished)에 맞춰 즉시 반전 동기화
-                // -> 방금 작업완료를 보냈더라도 바로 '작업취소' 버튼으로 전환되어 재조작 가능
                 document.getElementById('quantity').value = payload.quantity;
                 syncFormByFinishedState(payload.finished);
 
                 stopBlinking();
-                updateMarkersRotation(currentAngle, isZoomed2X);
+                updateMarkersDisplay(isZoomed2X);
                 updateQuantitySummary();
             })
             .catch(error => {
