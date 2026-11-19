@@ -86,10 +86,39 @@
             border-color: #0d47a1;
         }
 
-        /* 하단 입력 패널 (한 줄 레이아웃 컴팩트화) */
+        /* 원크기 버튼 밑 작업주수 / 작업완료주수 표시 박스 */
+        .count-summary-box {
+            background: #ffffff;
+            color: #1e293b;
+            border: 1px solid #cbd5e1;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            line-height: 1.35;
+        }
+        .count-summary-label {
+            display: block;
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 2px;
+        }
+        .count-summary-value {
+            font-size: 13px;
+            color: #0d47a1;
+        }
+        .count-summary-done {
+            color: #d32f2f;
+        }
+
+        /* 하단 입력 패널 (가시성 확보를 위해 높이 조정) */
         #panel {
             width: 100%;
-            height: 95px;
+            height: 118px;
             flex-shrink: 0;
             background: #ffffff;
             border-top: 1px solid #ccc;
@@ -123,6 +152,7 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            gap: 6px;
             overflow: hidden;
             box-sizing: border-box;
         }
@@ -163,31 +193,42 @@
         }
         .btn-send:disabled { background-color: #90caf9 !important; cursor: not-allowed; }
 
+        /* 최근 전송 내용 표시 영역 높이 및 가시성 강화 */
         #last-sent-box {
-            padding: 3px 8px;
+            min-height: 34px;
+            padding: 6px 10px;
             background-color: #f0fdf4;
             border: 1px solid #2b8a3e;
             border-radius: 6px;
-            font-size: 11px;
+            font-size: 12px;
             color: #222;
             display: none;
+            box-sizing: border-box;
         }
         .last-sent-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 8px;
+            height: 100%;
+        }
+        .last-sent-text {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
         }
         .btn-resend {
             background-color: #e03131; 
             color: white; 
-            font-size: 10px; 
+            font-size: 11px; 
             font-weight: bold;
             border: none; 
-            border-radius: 3px; 
-            padding: 1px 5px; 
+            border-radius: 4px; 
+            padding: 4px 8px; 
             cursor: pointer; 
-            width: auto; 
-            height: auto;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
     </style>
     <!-- 카카오맵 JS SDK -->
@@ -195,7 +236,7 @@
 </head>
 <body>
     <div id="map-wrapper">
-        <!-- 우측 상단 제어 버튼 및 옵션 영역 -->
+        <!-- 우측 상단 제어 버튼, 옵션 및 작업/완료 주수 요약 영역 -->
         <div class="control-group">
             <button id="zoom-btn" class="map-btn" onclick="toggleZoom()">2배 확대 (OFF)</button>
             <button id="rotate-btn" class="map-btn" onclick="rotateMap()">↻ 90° 회전 (0°)</button>
@@ -205,6 +246,12 @@
                 <option value="26">원크기: 크게</option>
                 <option value="32">원크기: 아주 크게</option>
             </select>
+            <div id="tree-count-box" class="count-summary-box">
+                <span class="count-summary-label">작업주수 / 작업완료주수</span>
+                <span class="count-summary-value">
+                    <span id="total-qty-text">0</span> / <span id="done-qty-text" class="count-summary-done">0</span>
+                </span>
+            </div>
         </div>
         <div id="map"></div>
     </div>
@@ -222,15 +269,17 @@
                 <input type="text" id="treeId" readonly placeholder="번호" style="flex: 0.6;">
                 <input type="text" id="species" readonly placeholder="수종" style="flex: 1.2;">
                 <input type="number" id="quantity" placeholder="주수" style="flex: 0.8;">
-                <!-- finished 상태를 담는 숨은 필드 -->
+                <!-- finished 상태를 담는 숨은 필드 (전송할 목표 상태) -->
                 <input type="hidden" id="finished" value="false">
                 <button id="sendBtn" class="btn-send" onclick="sendToNotion()" style="flex: 1.2;">작업완료</button>
             </div>
 
             <div id="last-sent-box">
                 <div class="last-sent-header">
-                    <strong id="status-title" style="color: #2b8a3e;">[전송 상태]</strong>
-                    <span id="last-sent-info">-</span>
+                    <div class="last-sent-text">
+                        <strong id="status-title" style="color: #2b8a3e;">[전송 상태]</strong>
+                        <span id="last-sent-info">-</span>
+                    </div>
                     <button class="btn-resend" onclick="resendToNotion()">↻ 재전송</button>
                 </div>
             </div>
@@ -430,7 +479,7 @@
         }
 
         // -------------------------------------------------------------
-        // 7. 깜빡임 제어 함수
+        // 7. 깜빡임 제어 및 폼 버튼 상태 동기화 함수
         // -------------------------------------------------------------
         function stopBlinking() {
             if (blinkTimer) {
@@ -451,7 +500,6 @@
             activeBlinkItem = item;
             activeBlinkItem._blinkState = false;
 
-            // 0.4초 간격으로 주황색(#ff9800)과 기존 색상 번갈아 가며 깜빡임
             blinkTimer = setInterval(() => {
                 activeBlinkItem._blinkState = !activeBlinkItem._blinkState;
                 const baseBg = activeBlinkItem.finished ? "#d32f2f" : "#0d47a1";
@@ -459,6 +507,39 @@
                 const blinkImage = createNumberMarker(activeBlinkItem.no, activeBlinkItem.quantity, color, currentAngle, isZoomed2X);
                 activeBlinkItem.marker.setImage(blinkImage);
             }, 400);
+        }
+
+        // 현재 마커의 finished 상태에 맞춰 폼 버튼 및 hidden 필드 동기화
+        function syncFormByFinishedState(isFinished) {
+            const sendBtn = document.getElementById('sendBtn');
+            const finishedInput = document.getElementById('finished');
+
+            if (isFinished) {
+                sendBtn.innerText = "작업취소";
+                sendBtn.style.backgroundColor = "#d32f2f";
+                finishedInput.value = "false"; // 다음 클릭 시 작업취소(false) 전송
+            } else {
+                sendBtn.innerText = "작업완료";
+                sendBtn.style.backgroundColor = "#0d47a1";
+                finishedInput.value = "true";  // 다음 클릭 시 작업완료(true) 전송
+            }
+        }
+
+        // 전체 작업주수 / 작업완료주수 집계 갱신
+        function updateQuantitySummary() {
+            let totalQty = 0;
+            let doneQty = 0;
+
+            markerList.forEach(item => {
+                const qty = parseInt(item.quantity, 10) || 0;
+                totalQty += qty;
+                if (item.finished) {
+                    doneQty += qty;
+                }
+            });
+
+            document.getElementById('total-qty-text').textContent = totalQty.toLocaleString();
+            document.getElementById('done-qty-text').textContent = doneQty.toLocaleString();
         }
 
         // -------------------------------------------------------------
@@ -494,7 +575,7 @@
                 return data.map(r => ({
                     no: r.no,
                     species: r.species || '-',
-                    quantity: r.quantity || 1,
+                    quantity: parseInt(r.quantity, 10) || 1,
                     finished: r.finished === true || r.finished === "true" || r.finished === 1 || r.finished === "1",
                     lat: parseFloat(r.lat),
                     lng: parseFloat(r.lng)
@@ -506,6 +587,10 @@
         }
 
         async function drawMarkers() {
+            stopBlinking();
+            markerList.forEach(m => m.marker.setMap(null));
+            markerList.length = 0;
+
             const data = await loadMarkerData();
 
             data.forEach((row) => {
@@ -531,26 +616,13 @@
                 };
                 markerList.push(item);
 
-                // 마커 클릭 시 하단 폼 바인딩, 버튼 제어 및 깜빡임 시작
+                // 마커 클릭 시 현재 저장된 item.finished 기준으로 폼 버튼 상태 동기화 및 깜빡임 시작
                 kakao.maps.event.addListener(marker, "click", () => {
-                    document.getElementById('treeId').value = row.no;
-                    document.getElementById('species').value = row.species;
-                    document.getElementById('quantity').value = row.quantity;
+                    document.getElementById('treeId').value = item.no;
+                    document.getElementById('species').value = item.species;
+                    document.getElementById('quantity').value = item.quantity;
 
-                    const sendBtn = document.getElementById('sendBtn');
-                    const finishedInput = document.getElementById('finished');
-
-                    if (row.finished) {
-                        sendBtn.innerText = "작업취소";
-                        sendBtn.style.backgroundColor = "#d32f2f"; 
-                        finishedInput.value = "false";
-                    } else {
-                        sendBtn.innerText = "작업완료";
-                        sendBtn.style.backgroundColor = "#0d47a1"; 
-                        finishedInput.value = "true";
-                    }
-
-                    // 클릭된 마커 깜빡임 시작
+                    syncFormByFinishedState(item.finished);
                     startBlinking(item);
 
                     const panel = document.getElementById('panel');
@@ -559,6 +631,8 @@
                     }
                 });
             });
+
+            updateQuantitySummary();
         }
 
         // -------------------------------------------------------------
@@ -575,14 +649,15 @@
                 return;
             }
 
-            const targetItem = markerList.find(item => item.no == treeId);
+            const targetItem = markerList.find(item => String(item.no) === String(treeId));
+            const parsedQty = quantity ? parseInt(quantity, 10) : 1;
 
             lastPayload = {
                 action: "update",
                 master_id: masterId,
                 tree_id: treeId,
                 species: species,
-                quantity: quantity ? parseInt(quantity, 10) : 1,
+                quantity: parsedQty,
                 finished: finishedVal,
                 lat: targetItem ? targetItem.lat : null,
                 lng: targetItem ? targetItem.lng : null
@@ -609,15 +684,25 @@
                 return response.json().catch(() => ({ status: 'success' }));
             })
             .then(data => {
-                alert('노션 DB에 작업 데이터가 정상적으로 전송되었습니다!');
-                updateDisplayBox(payload, true, '[전송 성공]');
-                // 전송 성공 시 해당 마커의 내부 finished 상태를 갱신하고 깜빡임 중지
-                const target = markerList.find(item => item.no == payload.tree_id);
+                const actionLabel = payload.finished ? "작업완료" : "작업취소";
+                alert(`노션 DB에 [${actionLabel}] 데이터가 정상적으로 반영되었습니다!`);
+                updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
+
+                // 웹앱 메모리 상의 번호별 완료 상태 및 주수 갱신
+                const target = markerList.find(item => String(item.no) === String(payload.tree_id));
                 if (target) {
                     target.finished = payload.finished;
+                    target.quantity = payload.quantity;
                 }
+
+                // 폼 입력값과 버튼을 갱신된 상태(payload.finished)에 맞춰 즉시 반전 동기화
+                // -> 방금 작업완료를 보냈더라도 바로 '작업취소' 버튼으로 전환되어 재조작 가능
+                document.getElementById('quantity').value = payload.quantity;
+                syncFormByFinishedState(payload.finished);
+
                 stopBlinking();
-                drawMarkers(); // 마커 색상 즉시 반영을 위해 재그리기 수행
+                updateMarkersRotation(currentAngle, isZoomed2X);
+                updateQuantitySummary();
             })
             .catch(error => {
                 alert('⚠️ [경고] 노션 전송에 실패했습니다!\n' + error.message + '\n하단의 [재전송] 버튼을 이용해 주세요.');
@@ -625,8 +710,10 @@
             })
             .finally(() => {
                 sendBtn.disabled = false;
-                sendBtn.innerText = originalText;
-                sendBtn.style.backgroundColor = originalBgColor;
+                if (document.getElementById('sendBtn').innerText === "전송 중...") {
+                    sendBtn.innerText = originalText;
+                    sendBtn.style.backgroundColor = originalBgColor;
+                }
             });
         }
 
@@ -634,6 +721,7 @@
             const displayBox = document.getElementById('last-sent-box');
             const statusTitle = document.getElementById('status-title');
             const displayInfo = document.getElementById('last-sent-info');
+            const stateText = payload.finished ? "작업완료(true)" : "작업취소(false)";
 
             if (isSuccess) {
                 displayBox.style.backgroundColor = '#f0fdf4';
@@ -646,7 +734,7 @@
             }
 
             statusTitle.innerText = titleText;
-            displayInfo.innerHTML = `No.<b>${payload.tree_id}</b> (${payload.species}/${payload.quantity}주)`;
+            displayInfo.innerHTML = `No.<b>${payload.tree_id}</b> · ${payload.species} · <b>${payload.quantity}주</b> (${stateText})`;
             displayBox.style.display = 'block';
         }
 
