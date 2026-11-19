@@ -23,6 +23,7 @@
         #map-wrapper {
             width: 100%;
             flex: 1;
+            min-height: 180px;
             position: relative;
             overflow: hidden;
         }
@@ -115,10 +116,10 @@
             color: #d32f2f;
         }
 
-        /* 하단 입력 패널 (가시성 확보를 위해 높이 조정) */
+        /* 하단 입력 패널 (내용에 따라 높이 유동 조절) */
         #panel {
             width: 100%;
-            height: 118px;
+            max-height: 45vh;
             flex-shrink: 0;
             background: #ffffff;
             border-top: 1px solid #ccc;
@@ -127,12 +128,13 @@
             z-index: 10;
             display: flex;
             flex-direction: column;
-            transition: height 0.3s ease;
+            transition: all 0.25s ease;
         }
-        #panel.collapsed { height: 36px; }
+        #panel.collapsed { max-height: 36px; }
 
         #panel-toggle-bar {
             height: 36px;
+            flex-shrink: 0;
             background: #f1f3f5;
             display: flex;
             align-items: center;
@@ -147,39 +149,53 @@
         }
 
         #panel-body {
-            flex: 1;
-            padding: 8px 10px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
-            gap: 6px;
-            overflow: hidden;
+            gap: 8px;
+            overflow-y: auto;
             box-sizing: border-box;
         }
         #panel.collapsed #panel-body { display: none; }
 
-        /* 입력 요소들과 전송 버튼을 한 줄(flex-row)로 배치 */
+        /* 모바일 및 다양한 화면 너비에 맞춰 유동적으로 줄바꿈되는 입력 영역 */
         .input-row-inline {
             display: flex;
-            gap: 6px;
-            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: stretch;
         }
 
         input { 
-            height: 36px; 
+            height: 38px; 
             font-size: 13px; 
             border-radius: 6px; 
             border: 1px solid #ddd; 
             box-sizing: border-box; 
-            padding: 0 8px;
+            padding: 0 10px;
         }
         input[readonly] { 
             background-color: #f5f5f5; 
-            color: #666; 
+            color: #555; 
+        }
+
+        .field-no {
+            flex: 1 1 70px;
+            min-width: 65px;
+        }
+        .field-species {
+            flex: 2 1 120px;
+            min-width: 110px;
+        }
+        .field-qty {
+            flex: 1 1 80px;
+            min-width: 75px;
         }
 
         .btn-send { 
-            height: 36px; 
+            height: 38px; 
+            flex: 1.5 1 110px;
+            min-width: 100px;
             font-size: 13px;
             background-color: #0d47a1; 
             color: white; 
@@ -188,15 +204,15 @@
             border-radius: 6px; 
             cursor: pointer;
             white-space: nowrap;
-            padding: 0 12px;
+            padding: 0 14px;
             transition: background-color 0.2s ease;
         }
         .btn-send:disabled { background-color: #90caf9 !important; cursor: not-allowed; }
 
-        /* 최근 전송 내용 표시 영역 높이 및 가시성 강화 */
+        /* 최근 전송 내용 표시 영역 */
         #last-sent-box {
-            min-height: 34px;
-            padding: 6px 10px;
+            min-height: 36px;
+            padding: 8px 10px;
             background-color: #f0fdf4;
             border: 1px solid #2b8a3e;
             border-radius: 6px;
@@ -209,14 +225,15 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
             gap: 8px;
-            height: 100%;
         }
         .last-sent-text {
             display: flex;
             align-items: center;
             gap: 6px;
             flex-wrap: wrap;
+            flex: 1 1 180px;
         }
         .btn-resend {
             background-color: #e03131; 
@@ -225,7 +242,7 @@
             font-weight: bold;
             border: none; 
             border-radius: 4px; 
-            padding: 4px 8px; 
+            padding: 5px 10px; 
             cursor: pointer; 
             white-space: nowrap;
             flex-shrink: 0;
@@ -263,14 +280,14 @@
         </div>
 
         <div id="panel-body">
-            <!-- 번호, 수종, 주수, 전송버튼을 모두 한 줄로 배치 -->
+            <!-- 화면 크기에 따라 유동적으로 줄바꿈되는 입력 및 전송 영역 -->
             <div class="input-row-inline">
-                <input type="text" id="treeId" readonly placeholder="번호" style="flex: 0.6;">
-                <input type="text" id="species" readonly placeholder="수종" style="flex: 1.2;">
-                <input type="number" id="quantity" placeholder="주수" style="flex: 0.8;">
+                <input type="text" id="treeId" class="field-no" readonly placeholder="번호">
+                <input type="text" id="species" class="field-species" readonly placeholder="수종">
+                <input type="number" id="quantity" class="field-qty" placeholder="주수">
                 <!-- finished 상태를 담는 숨은 필드 (전송할 목표 상태) -->
                 <input type="hidden" id="finished" value="false">
-                <button id="sendBtn" class="btn-send" onclick="sendToNotion()" style="flex: 1.2;">작업완료</button>
+                <button id="sendBtn" class="btn-send" onclick="sendToNotion()">작업완료</button>
             </div>
 
             <div id="last-sent-box">
@@ -524,7 +541,7 @@
             } else {
                 toggleArrow.textContent = "▲ 폼 숨기기";
             }
-            setTimeout(() => { map.relayout(); }, 200);
+            setTimeout(() => { map.relayout(); }, 250);
         };
 
         // -------------------------------------------------------------
