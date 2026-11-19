@@ -257,8 +257,9 @@
 
         const markerList = [];
         let lastPayload = null;
-        const webhookLoadUrl = "https://hook.eu2.make.com/w53mbrle7l602lux6nfjb9o0qq66c7yi"; // 조회용 웹훅 URL
-        const webhookSendUrl = "https://hook.eu2.make.com/mayg8iuujzutftye9q0ntf6uw91zubi4"; // 노션 전송용 웹훅 URL
+
+        // 단일 Make 웹훅 URL (조회: action=load / 전송: action=update)
+        const webhookUrl = "https://hook.eu2.make.com/w53mbrle7l602lux6nfjb9o0qq66c7yi";
 
         // 깜빡임(Blink) 상태 관리 변수
         let activeBlinkItem = null; 
@@ -477,12 +478,12 @@
         };
 
         // -------------------------------------------------------------
-        // 9. 데이터 로드 및 마커 생성 (마커 클릭 이벤트 처리)
+        // 9. 데이터 로드 및 마커 생성 (단일 웹훅 action=load 사용)
         // -------------------------------------------------------------
         async function loadMarkerData() {
             if (!masterId) return [];
             try {
-                const res = await fetch(`${webhookLoadUrl}?master_id=${masterId}`);
+                const res = await fetch(`${webhookUrl}?action=load&master_id=${encodeURIComponent(masterId)}`);
                 if (!res.ok) throw new Error("서버 응답 오류");
                 
                 let data = await res.json();
@@ -561,7 +562,7 @@
         }
 
         // -------------------------------------------------------------
-        // 10. 노션 전송 및 재전송 처리
+        // 10. 노션 전송 및 재전송 처리 (단일 웹훅 action=update 사용)
         // -------------------------------------------------------------
         window.sendToNotion = function() {
             const treeId = document.getElementById('treeId').value;
@@ -577,10 +578,11 @@
             const targetItem = markerList.find(item => item.no == treeId);
 
             lastPayload = {
+                action: "update",
                 master_id: masterId,
                 tree_id: treeId,
                 species: species,
-                quantity: quantity ? parseInt(quantity) : 1,
+                quantity: quantity ? parseInt(quantity, 10) : 1,
                 finished: finishedVal,
                 lat: targetItem ? targetItem.lat : null,
                 lng: targetItem ? targetItem.lng : null
@@ -597,7 +599,7 @@
             sendBtn.disabled = true;
             sendBtn.innerText = "전송 중...";
 
-            fetch(webhookSendUrl, {
+            fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
