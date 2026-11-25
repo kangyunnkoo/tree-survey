@@ -139,13 +139,55 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 12px;
+            padding: 0 10px;
+            gap: 8px;
             font-size: 13px;
             font-weight: bold;
             color: #495057;
-            cursor: pointer;
             border-bottom: 1px solid #dee2e6;
             user-select: none;
+        }
+        .toggle-title-area {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .voice-btn {
+            background: #ffffff;
+            color: #1e293b;
+            border: 1px solid #94a3b8;
+            border-radius: 5px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .voice-btn.listening {
+            background: #dc2626;
+            color: #ffffff;
+            border-color: #dc2626;
+            animation: pulseMic 1.2s infinite;
+        }
+        @keyframes pulseMic {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        #voice-status-bar {
+            display: none;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e3a8a;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 12px;
+            line-height: 1.35;
         }
 
         #panel-body {
@@ -263,9 +305,9 @@
                 <option value="32">원크기: 아주 크게</option>
             </select>
             <div id="tree-count-box" class="count-summary-box">
-                <span class="count-summary-label">작업완료주수 / 작업주수</span>
+                <span class="count-summary-label">작업주수 / 작업완료주수</span>
                 <span class="count-summary-value">
-                    <span id="done-qty-text" class="count-summary-done">0</span> / <span id="total-qty-text">0</span>
+                    <span id="total-qty-text">0</span> / <span id="done-qty-text" class="count-summary-done">0</span>
                 </span>
             </div>
         </div>
@@ -274,12 +316,19 @@
 
     <!-- 하단 입력 폼 패널 -->
     <div id="panel" class="">
-        <div id="panel-toggle-bar" onclick="togglePanel()">
-            <span>🌳 나무주사 작업 입력 및 노션 전송 폼</span>
-            <span id="toggle-arrow">▲ 폼 숨기기</span>
+        <div id="panel-toggle-bar">
+            <div class="toggle-title-area" onclick="togglePanel()">
+                <span>🌳 나무주사 작업 입력 및 노션 전송 폼</span>
+                <span id="toggle-arrow">▲ 폼 숨기기</span>
+            </div>
+            <button id="voice-btn" class="voice-btn" type="button" onclick="toggleVoiceRecognition()">🎙️ 음성인식 OFF</button>
         </div>
 
         <div id="panel-body">
+            <div id="voice-status-bar">
+                <strong>🎙️ 음성명령:</strong> <span id="voice-status-text">대기 중 ("15번 클릭", "15번 작업시작", "작업완료")</span>
+            </div>
+
             <!-- 화면 크기에 따라 유동적으로 줄바꿈되는 입력 및 전송 영역 -->
             <div class="input-row-inline">
                 <input type="text" id="treeId" class="field-no" readonly placeholder="번호">
@@ -308,7 +357,7 @@
         // -------------------------------------------------------------
         const params = new URLSearchParams(window.location.search);
         const masterId = params.get("master_id") || "";
-        const centerLat = parseFloat(params.get("centerLat")) || 37.5665; // 기본값: 서울시청
+        const centerLat = parseFloat(params.get("centerLat")) || 37.5665;
         const centerLng = parseFloat(params.get("centerLng")) || 126.9780;
 
         const initialCenter = new kakao.maps.LatLng(centerLat, centerLng);
@@ -465,7 +514,7 @@
         }
 
         // -------------------------------------------------------------
-        // 6. 깜빡임 제어 및 폼 버튼 상태 동기화 함수
+        // 6. 깜빡임 제어, 마커 선택(클릭 동작) 및 폼 상태 동기화
         // -------------------------------------------------------------
         function stopBlinking() {
             if (blinkTimer) {
@@ -495,7 +544,25 @@
             }, 400);
         }
 
-        // 현재 마커의 finished 상태에 맞춰 폼 버튼 및 hidden 필드 동기화
+        // 마커 클릭 및 음성 번호 호출 시 공통 실행 함수
+        function selectMarkerByItem(item) {
+            if (!item) return;
+            document.getElementById('treeId').value = item.no;
+            document.getElementById('species').value = item.species;
+            document.getElementById('quantity').value = item.quantity;
+
+            syncFormByFinishedState(item.finished);
+            startBlinking(item);
+
+            // 선택된 마커 위치로 지도 중심 이동
+            map.setCenter(new kakao.maps.LatLng(item.lat, item.lng));
+
+            const panel = document.getElementById('panel');
+            if (panel.classList.contains('collapsed')) {
+                togglePanel();
+            }
+        }
+
         function syncFormByFinishedState(isFinished) {
             const sendBtn = document.getElementById('sendBtn');
             const finishedInput = document.getElementById('finished');
@@ -503,15 +570,14 @@
             if (isFinished) {
                 sendBtn.innerText = "작업취소";
                 sendBtn.style.backgroundColor = "#d32f2f";
-                finishedInput.value = "false"; // 다음 클릭 시 작업취소(false) 전송
+                finishedInput.value = "false";
             } else {
                 sendBtn.innerText = "작업완료";
                 sendBtn.style.backgroundColor = "#0d47a1";
-                finishedInput.value = "true";  // 다음 클릭 시 작업완료(true) 전송
+                finishedInput.value = "true";
             }
         }
 
-        // 전체 작업주수 / 작업완료주수 집계 갱신
         function updateQuantitySummary() {
             let totalQty = 0;
             let doneQty = 0;
@@ -602,19 +668,8 @@
                 };
                 markerList.push(item);
 
-                // 마커 클릭 시 현재 저장된 item.finished 기준으로 폼 버튼 상태 동기화 및 깜빡임 시작
                 kakao.maps.event.addListener(marker, "click", () => {
-                    document.getElementById('treeId').value = item.no;
-                    document.getElementById('species').value = item.species;
-                    document.getElementById('quantity').value = item.quantity;
-
-                    syncFormByFinishedState(item.finished);
-                    startBlinking(item);
-
-                    const panel = document.getElementById('panel');
-                    if (panel.classList.contains('collapsed')) {
-                        togglePanel();
-                    }
+                    selectMarkerByItem(item);
                 });
             });
 
@@ -631,7 +686,7 @@
             const finishedVal = document.getElementById('finished').value === "true";
 
             if (!treeId) {
-                alert('마커를 선택하여 번호를 불러와 주세요.');
+                alert('마커를 선택하거나 음성으로 번호를 먼저 지정해 주세요.');
                 return;
             }
 
@@ -671,7 +726,7 @@
             })
             .then(data => {
                 const actionLabel = payload.finished ? "작업완료" : "작업취소";
-                alert(`노션 DB에 [${actionLabel}] 데이터가 정상적으로 반영되었습니다!`);
+                setVoiceStatus(`노션 DB에 [${actionLabel}] 반영 완료 (No.${payload.tree_id})`);
                 updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
 
                 const target = markerList.find(item => String(item.no) === String(payload.tree_id));
@@ -688,7 +743,7 @@
                 updateQuantitySummary();
             })
             .catch(error => {
-                alert('⚠️ [경고] 노션 전송에 실패했습니다!\n' + error.message + '\n하단의 [재전송] 버튼을 이용해 주세요.');
+                setVoiceStatus(`전송 실패: ${error.message}`);
                 updateDisplayBox(payload, false, '[전송 실패]');
             })
             .finally(() => {
@@ -727,6 +782,198 @@
                 return;
             }
             executeFetch(lastPayload);
+        };
+
+        // -------------------------------------------------------------
+        // 10. 음성 인식 (Web Speech API) 제어
+        // -------------------------------------------------------------
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isVoiceEnabled = false;
+        let lastCommandTime = 0;
+        let lastHandledTranscript = "";
+
+        function setVoiceStatus(msg) {
+            const bar = document.getElementById('voice-status-bar');
+            const textEl = document.getElementById('voice-status-text');
+            if (bar && textEl) {
+                bar.style.display = 'block';
+                textEl.textContent = msg;
+            }
+        }
+
+        // 한글 숫자/공백 정규화 (예: "십오번 클릭" -> "15번 클릭")
+        function normalizeKoreanSpeech(raw) {
+            let s = (raw || "").trim().replace(/\s+/g, "");
+            const korDigits = { "영": "0", "공": "0", "일": "1", "이": "2", "삼": "3", "사": "4", "오": "5", "육": "6", "칠": "7", "팔": "8", "구": "9" };
+            // "십오" -> "15", "이십삼" -> "23" 형태 간단 변환
+            s = s.replace(/([일이삼사오육칠팔구])?십([일이삼사오육칠팔구])?/g, (_, tens, ones) => {
+                const t = tens ? korDigits[tens] : "1";
+                const o = ones ? korDigits[ones] : "0";
+                return String(parseInt(t, 10) * 10 + parseInt(o, 10));
+            });
+            s = s.replace(/[영공일이삼사오육칠팔구]/g, ch => korDigits[ch]);
+            return s;
+        }
+
+        function handleVoiceCommand(transcript) {
+            const normalized = normalizeKoreanSpeech(transcript);
+            const now = Date.now();
+
+            // 연속 중간결과로 인한 중복 실행 방지 (1.2초 쿨다운)
+            if (normalized === lastHandledTranscript && (now - lastCommandTime) < 1200) {
+                return;
+            }
+
+            // 1) "작업완료" 명령
+            if (normalized.includes("작업완료")) {
+                lastHandledTranscript = normalized;
+                lastCommandTime = now;
+                const currentTreeId = document.getElementById('treeId').value;
+                if (!currentTreeId) {
+                    setVoiceStatus(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요 (예: "15번 클릭")`);
+                    return;
+                }
+                // 완료 상태로 전송하도록 설정 후 전송
+                document.getElementById('finished').value = "true";
+                setVoiceStatus(`"${transcript}" 인식 → No.${currentTreeId} 작업완료 전송 중...`);
+                sendToNotion();
+                return;
+            }
+
+            // 2) "작업취소" 명령
+            if (normalized.includes("작업취소")) {
+                lastHandledTranscript = normalized;
+                lastCommandTime = now;
+                const currentTreeId = document.getElementById('treeId').value;
+                if (!currentTreeId) {
+                    setVoiceStatus(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요`);
+                    return;
+                }
+                document.getElementById('finished').value = "false";
+                setVoiceStatus(`"${transcript}" 인식 → No.${currentTreeId} 작업취소 전송 중...`);
+                sendToNotion();
+                return;
+            }
+
+            // 3) 깜빡임 중지 명령
+            if (normalized.includes("깜빡임끄기") || normalized.includes("선택취소")) {
+                lastHandledTranscript = normalized;
+                lastCommandTime = now;
+                stopBlinking();
+                setVoiceStatus(`"${transcript}" 인식 → 마커 깜빡임 중지`);
+                return;
+            }
+
+            // 4) "<숫자>번 클릭" 또는 "<숫자>번 작업시작" (또는 "<숫자>번")
+            const numMatch = normalized.match(/(\d+)\s*번(?:\s*(?:클릭|작업시작|선택))?/) ||
+                             (normalized.includes("클릭") || normalized.includes("작업시작") ? normalized.match(/(\d+)/) : null);
+
+            if (numMatch && numMatch[1]) {
+                const targetNo = String(parseInt(numMatch[1], 10));
+                const found = markerList.find(item => String(item.no).trim() === targetNo);
+
+                if (found) {
+                    lastHandledTranscript = normalized;
+                    lastCommandTime = now;
+                    selectMarkerByItem(found);
+                    setVoiceStatus(`"${transcript}" 인식 → ${found.no}번 마커 선택 및 깜빡임 시작`);
+                } else {
+                    setVoiceStatus(`"${transcript}" 인식 → ${targetNo}번 마커를 찾지 못했습니다.`);
+                }
+                return;
+            }
+
+            setVoiceStatus(`인식됨: "${transcript}" (지원 명령: "15번 클릭", "15번 작업시작", "작업완료")`);
+        }
+
+        function initSpeechRecognition() {
+            if (!SpeechRecognition) return null;
+            const rec = new SpeechRecognition();
+            rec.lang = 'ko-KR';
+            rec.continuous = true;
+            rec.interimResults = true;
+
+            rec.onresult = (event) => {
+                let latestTranscript = "";
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    latestTranscript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        handleVoiceCommand(latestTranscript);
+                    } else {
+                        setVoiceStatus(`듣는 중: "${latestTranscript}"`);
+                    }
+                }
+            };
+
+            rec.onerror = (event) => {
+                if (event.error === 'not-allowed') {
+                    isVoiceEnabled = false;
+                    updateVoiceButtonUI();
+                    setVoiceStatus("마이크 권한이 거부되었습니다. 브라우저 설정에서 마이크를 허용해 주세요.");
+                } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                    setVoiceStatus(`음성 인식 오류: ${event.error}`);
+                }
+            };
+
+            rec.onend = () => {
+                if (isVoiceEnabled) {
+                    try {
+                        rec.start();
+                    } catch (e) {
+                        // 이미 시작 중인 경우 무시
+                    }
+                }
+            };
+
+            return rec;
+        }
+
+        function updateVoiceButtonUI() {
+            const btn = document.getElementById('voice-btn');
+            if (!btn) return;
+            if (isVoiceEnabled) {
+                btn.textContent = "🎙️ 음성인식 ON";
+                btn.classList.add("listening");
+            } else {
+                btn.textContent = "🎙️ 음성인식 OFF";
+                btn.classList.remove("listening");
+            }
+        }
+
+        window.toggleVoiceRecognition = function() {
+            if (!SpeechRecognition) {
+                alert("이 브라우저는 음성 인식(Web Speech API)을 지원하지 않습니다. Chrome 브라우저를 사용해 주세요.");
+                return;
+            }
+
+            if (!recognition) {
+                recognition = initSpeechRecognition();
+            }
+
+            if (!isVoiceEnabled) {
+                isVoiceEnabled = true;
+                updateVoiceButtonUI();
+                const panel = document.getElementById('panel');
+                if (panel.classList.contains('collapsed')) {
+                    togglePanel();
+                }
+                setVoiceStatus('마이크 켜짐 — "15번 클릭" 또는 "15번 작업시작" 후 "작업완료"라고 말씀해 주세요.');
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                isVoiceEnabled = false;
+                updateVoiceButtonUI();
+                setVoiceStatus("음성 인식이 꺼졌습니다.");
+                try {
+                    recognition.stop();
+                } catch (e) {
+                    console.error(e);
+                }
+            }
         };
 
         // 초기 레이아웃 재배치 및 중심좌표 고정
