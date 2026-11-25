@@ -347,7 +347,7 @@
 
         <div id="panel-body">
             <div id="voice-status-bar">
-                <strong>🎙️ 상태:</strong> <span id="voice-status-text">대기 중 ("15번 클릭", "15번 작업시작", "작업완료")</span>
+                <strong>🎙️ 상태:</strong> <span id="voice-status-text">대기 중 ("15번 작업시작", "작업완료", "14번 작업완료")</span>
             </div>
 
             <!-- 화면 크기에 따라 유동적으로 줄바꿈되는 입력 및 전송 영역 -->
@@ -564,13 +564,17 @@
             }, 400);
         }
 
-        function selectMarkerByItem(item) {
+        function populateFormOnly(item) {
             if (!item) return;
             document.getElementById('treeId').value = item.no;
             document.getElementById('species').value = item.species;
             document.getElementById('quantity').value = item.quantity;
-
             syncFormByFinishedState(item.finished);
+        }
+
+        function selectMarkerByItem(item) {
+            if (!item) return;
+            populateFormOnly(item);
             startBlinking(item);
 
             map.setCenter(new kakao.maps.LatLng(item.lat, item.lng));
@@ -703,19 +707,30 @@
         // -------------------------------------------------------------
         // 9. 노션 전송 및 재전송 처리 (단일 웹훅 action=update 사용)
         // -------------------------------------------------------------
-        window.sendToNotion = function() {
-            const treeId = document.getElementById('treeId').value;
-            const species = document.getElementById('species').value;
-            const quantity = document.getElementById('quantity').value;
-            const finishedVal = document.getElementById('finished').value === "true";
+        window.sendToNotion = function(overrideOptions = null) {
+            const treeId = overrideOptions && overrideOptions.treeId !== undefined
+                ? String(overrideOptions.treeId)
+                : document.getElementById('treeId').value;
+            const targetItem = markerList.find(item => String(item.no).trim() === String(treeId).trim());
+
+            const species = overrideOptions && overrideOptions.species !== undefined
+                ? overrideOptions.species
+                : (document.getElementById('species').value || (targetItem ? targetItem.species : '-'));
+
+            const rawQty = overrideOptions && overrideOptions.quantity !== undefined
+                ? overrideOptions.quantity
+                : (document.getElementById('quantity').value || (targetItem ? targetItem.quantity : 1));
+
+            const finishedVal = overrideOptions && overrideOptions.finished !== undefined
+                ? Boolean(overrideOptions.finished)
+                : (document.getElementById('finished').value === "true");
 
             if (!treeId) {
                 alert('마커를 선택하거나 음성으로 번호를 먼저 지정해 주세요.');
                 return;
             }
 
-            const targetItem = markerList.find(item => String(item.no) === String(treeId));
-            const parsedQty = quantity ? parseInt(quantity, 10) : 1;
+            const parsedQty = rawQty ? parseInt(rawQty, 10) : 1;
 
             lastPayload = {
                 action: "update",
@@ -752,14 +767,16 @@
                 const actionLabel = payload.finished ? "작업완료" : "작업취소";
                 const shortAction = payload.finished ? "완료" : "취소";
 
-                const target = markerList.find(item => String(item.no) === String(payload.tree_id));
+                const target = markerList.find(item => String(item.no).trim() === String(payload.tree_id).trim());
                 if (target) {
                     target.finished = payload.finished;
                     target.quantity = payload.quantity;
                 }
 
-                document.getElementById('quantity').value = payload.quantity;
-                syncFormByFinishedState(payload.finished);
+                if (String(document.getElementById('treeId').value).trim() === String(payload.tree_id).trim()) {
+                    document.getElementById('quantity').value = payload.quantity;
+                    syncFormByFinishedState(payload.finished);
+                }
 
                 stopBlinking();
                 updateMarkersDisplay(isZoomed2X);
@@ -943,93 +960,170 @@
         let isRecognizing = false;
         let restartTimer = null;
         let lastCommandTime = 0;
-        let lastHandledTranscript = "";
+        let lastHandledKey = "";
+
+        // 한글 숫자(백/십/단위)를 아라비아 숫자로 변환
+        function convertKoreanNumberToken(token) {
+            if (!token) return "";
+            if (/^\d+$/.test(token)) return String(parseInt(token, 10));
+
+            const digitMap = {
+                "영": 0, "공": 0, "일": 1, "이": 2, "삼": 3, "사": 4,
+                "오": 5, "육": 6, "칠": 7, "팔": 8, "구": 9
+            };
+
+            let total = 0;
+            let current = 0;
+            let hasNumber = false;
+
+            for (let i = 0; i < token.length; i++) {
+                const ch = token[i];
+                if (Object.prototype.hasOwnProperty.call(digitMap, ch)) {
+                    current = digitMap[ch];
+                    hasNumber = true;
+                } else if (ch === "십") {
+                    total += (current || 1) * 10;
+                    current = 0;
+                    hasNumber = true;
+                } else if (ch === "백") {
+                    total += (current || 1) * 100;
+                    current = 0;
+                    hasNumber = true;
+                }
+            }
+
+            if (!hasNumber) return "";
+            return String(total + current);
+        }
 
         function normalizeKoreanSpeech(raw) {
             let s = (raw || "").trim().replace(/\s+/g, "");
-            const korDigits = { "영": "0", "공": "0", "일": "1", "이": "2", "삼": "3", "사": "4", "오": "5", "육": "6", "칠": "7", "팔": "8", "구": "9" };
-            s = s.replace(/([일이삼사오육칠팔구])?십([일이삼사오육칠팔구])?/g, (_, tens, ones) => {
-                const t = tens ? korDigits[tens] : "1";
-                const o = ones ? korDigits[ones] : "0";
-                return String(parseInt(t, 10) * 10 + parseInt(o, 10));
+            // "<한글숫자>번" 형태를 "<아라비아숫자>번"으로 변환
+            s = s.replace(/([영공일이삼사오육칠팔구십백]+)번/g, (_, numPart) => {
+                const converted = convertKoreanNumberToken(numPart);
+                return converted ? `${converted}번` : `${numPart}번`;
             });
-            s = s.replace(/[영공일이삼사오육칠팔구]/g, ch => korDigits[ch]);
             return s;
+        }
+
+        function shouldSkipDuplicate(commandKey, windowMs = 1800) {
+            const now = Date.now();
+            if (commandKey === lastHandledKey && (now - lastCommandTime) < windowMs) {
+                return true;
+            }
+            lastHandledKey = commandKey;
+            lastCommandTime = now;
+            return false;
+        }
+
+        function directSendByNumber(rawNo, finishedState, rawTranscript) {
+            const targetNo = String(parseInt(rawNo, 10));
+            const found = markerList.find(item => String(item.no).trim() === targetNo);
+            const actionName = finishedState ? "작업완료" : "작업취소";
+
+            if (!found) {
+                setStatusBanner(`"${rawTranscript}" 인식 → ${targetNo}번 마커를 찾을 수 없습니다.`, 'error');
+                playBeep('error');
+                return;
+            }
+
+            populateFormOnly(found);
+            document.getElementById('finished').value = finishedState ? "true" : "false";
+            setStatusBanner(`"${rawTranscript}" 인식 → ${found.no}번 ${actionName} 바로 전송 중...`, 'normal');
+
+            sendToNotion({
+                treeId: found.no,
+                species: found.species,
+                quantity: found.quantity,
+                finished: finishedState
+            });
         }
 
         function handleVoiceCommand(transcript) {
             const normalized = normalizeKoreanSpeech(transcript);
-            const now = Date.now();
 
-            if (normalized === lastHandledTranscript && (now - lastCommandTime) < 1200) {
+            // 1) "<숫자>번 작업완료" 또는 "<숫자>번 완료"
+            const directCompleteMatch = normalized.match(/(\d+)\s*번\s*(?:작업완료|완료)/);
+            if (directCompleteMatch && directCompleteMatch[1]) {
+                const targetNo = String(parseInt(directCompleteMatch[1], 10));
+                if (shouldSkipDuplicate(`direct-done:${targetNo}`)) return;
+                directSendByNumber(targetNo, true, transcript);
                 return;
             }
 
+            // 2) "<숫자>번 작업취소" 또는 "<숫자>번 취소"
+            const directCancelMatch = normalized.match(/(\d+)\s*번\s*(?:작업취소|취소)/);
+            if (directCancelMatch && directCancelMatch[1]) {
+                const targetNo = String(parseInt(directCancelMatch[1], 10));
+                if (shouldSkipDuplicate(`direct-cancel:${targetNo}`)) return;
+                directSendByNumber(targetNo, false, transcript);
+                return;
+            }
+
+            // 3) 번호 없이 단독 "작업완료"
             if (normalized.includes("작업완료")) {
-                lastHandledTranscript = normalized;
-                lastCommandTime = now;
                 const currentTreeId = document.getElementById('treeId').value;
+                if (shouldSkipDuplicate(`done:${currentTreeId || 'none'}`)) return;
                 if (!currentTreeId) {
-                    setStatusBanner(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요 (예: "15번 클릭")`, 'normal');
+                    setStatusBanner(`"${transcript}" 인식 → 번호를 함께 말하거나 먼저 선택해 주세요 (예: "14번 작업완료")`, 'normal');
                     return;
                 }
                 document.getElementById('finished').value = "true";
                 setStatusBanner(`"${transcript}" 인식 → No.${currentTreeId} 작업완료 전송 중...`, 'normal');
-                sendToNotion();
+                sendToNotion({ finished: true });
                 return;
             }
 
+            // 4) 번호 없이 단독 "작업취소"
             if (normalized.includes("작업취소")) {
-                lastHandledTranscript = normalized;
-                lastCommandTime = now;
                 const currentTreeId = document.getElementById('treeId').value;
+                if (shouldSkipDuplicate(`cancel:${currentTreeId || 'none'}`)) return;
                 if (!currentTreeId) {
-                    setStatusBanner(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요`, 'normal');
+                    setStatusBanner(`"${transcript}" 인식 → 번호를 함께 말하거나 먼저 선택해 주세요`, 'normal');
                     return;
                 }
                 document.getElementById('finished').value = "false";
                 setStatusBanner(`"${transcript}" 인식 → No.${currentTreeId} 작업취소 전송 중...`, 'normal');
-                sendToNotion();
+                sendToNotion({ finished: false });
                 return;
             }
 
+            // 5) 남은 주수 조회
             if (normalized.includes("남은주수") || normalized.includes("몇주남았")) {
-                lastHandledTranscript = normalized;
-                lastCommandTime = now;
+                if (shouldSkipDuplicate("remain-qty")) return;
                 const { remainingQty } = getQuantityStats();
                 setStatusBanner(`잔여 ${remainingQty.toLocaleString()}주`, 'success');
                 playBeep('info');
                 return;
             }
 
+            // 6) 깜빡임 중지
             if (normalized.includes("깜빡임끄기") || normalized.includes("선택취소")) {
-                lastHandledTranscript = normalized;
-                lastCommandTime = now;
+                if (shouldSkipDuplicate("stop-blink")) return;
                 stopBlinking();
                 setStatusBanner(`"${transcript}" 인식 → 마커 깜빡임 중지`, 'normal');
                 return;
             }
 
-            const numMatch = normalized.match(/(\d+)\s*번(?:\s*(?:클릭|작업시작|선택))?/) ||
-                             (normalized.includes("클릭") || normalized.includes("작업시작") ? normalized.match(/(\d+)/) : null);
-
+            // 7) "<숫자>번" (뒤에 "클릭", "작업시작", "선택"이 붙거나 단독 "<숫자>번")
+            const numMatch = normalized.match(/(\d+)\s*번(?:\s*(?:클릭|작업시작|선택))?/);
             if (numMatch && numMatch[1]) {
                 const targetNo = String(parseInt(numMatch[1], 10));
-                const found = markerList.find(item => String(item.no).trim() === targetNo);
+                if (shouldSkipDuplicate(`select:${targetNo}`)) return;
 
+                const found = markerList.find(item => String(item.no).trim() === targetNo);
                 if (found) {
-                    lastHandledTranscript = normalized;
-                    lastCommandTime = now;
                     selectMarkerByItem(found);
                     setStatusBanner(`"${transcript}" 인식 → ${found.no}번 마커 선택 및 깜빡임 시작`, 'success');
                     playBeep('info');
                 } else {
-                    setStatusBanner(`"${transcript}" 인식 → ${targetNo}번 마커를 찾지 못했습니다.`, 'error');
+                    setStatusBanner(`"${transcript}" 인식 → ${targetNo}번 마커를 찾을 수 없습니다.`, 'error');
+                    playBeep('error');
                 }
                 return;
             }
 
-            setStatusBanner(`인식됨: "${transcript}" (명령: "15번 클릭", "15번 작업시작", "작업완료", "남은주수")`, 'normal');
+            setStatusBanner(`인식됨: "${transcript}" (명령: "15번 작업시작", "작업완료", "14번 작업완료")`, 'normal');
         }
 
         function safeStartRecognition() {
@@ -1141,7 +1235,7 @@
                 if (panel.classList.contains('collapsed')) {
                     togglePanel();
                 }
-                setStatusBanner('마이크 켜짐 — "15번 클릭" 또는 "15번 작업시작" 후 "작업완료"라고 말씀해 주세요.', 'normal');
+                setStatusBanner('마이크 켜짐 — "15번 작업시작" 후 "작업완료", 또는 "14번 작업완료"라고 말씀해 주세요.', 'normal');
                 safeStartRecognition();
             } else {
                 isVoiceEnabled = false;
