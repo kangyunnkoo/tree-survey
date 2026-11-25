@@ -202,6 +202,12 @@
             color: #14532d;
             font-weight: bold;
         }
+        #voice-status-bar.alert-all-done {
+            background: #fef3c7;
+            border: 2px solid #d97706;
+            color: #78350f;
+            font-weight: bold;
+        }
         #voice-status-bar.alert-error {
             background: #fee2e2;
             border: 2px solid #dc2626;
@@ -347,7 +353,7 @@
 
         <div id="panel-body">
             <div id="voice-status-bar">
-                <strong>🎙️ 상태:</strong> <span id="voice-status-text">대기 중 ("15번 작업시작", "작업완료", "14번 작업완료")</span>
+                <strong>🎙️ 상태:</strong> <span id="voice-status-text">대기 중 ("15번 시작", "완료", "14번 완료", "취소")</span>
             </div>
 
             <!-- 화면 크기에 따라 유동적으로 줄바꿈되는 입력 및 전송 영역 -->
@@ -357,7 +363,7 @@
                 <input type="number" id="quantity" class="field-qty" placeholder="주수">
                 <!-- finished 상태를 담는 숨은 필드 (전송할 목표 상태) -->
                 <input type="hidden" id="finished" value="false">
-                <button id="sendBtn" class="btn-send" onclick="sendToNotion()">작업완료</button>
+                <button id="sendBtn" class="btn-send" onclick="sendToNotion()">완료</button>
             </div>
 
             <div id="last-sent-box">
@@ -590,11 +596,11 @@
             const finishedInput = document.getElementById('finished');
 
             if (isFinished) {
-                sendBtn.innerText = "작업취소";
+                sendBtn.innerText = "취소";
                 sendBtn.style.backgroundColor = "#d32f2f";
                 finishedInput.value = "false";
             } else {
-                sendBtn.innerText = "작업완료";
+                sendBtn.innerText = "완료";
                 sendBtn.style.backgroundColor = "#0d47a1";
                 finishedInput.value = "true";
             }
@@ -764,8 +770,7 @@
                 return response.json().catch(() => ({ status: 'success' }));
             })
             .then(data => {
-                const actionLabel = payload.finished ? "작업완료" : "작업취소";
-                const shortAction = payload.finished ? "완료" : "취소";
+                const actionLabel = payload.finished ? "완료" : "취소";
 
                 const target = markerList.find(item => String(item.no).trim() === String(payload.tree_id).trim());
                 if (target) {
@@ -782,12 +787,19 @@
                 updateMarkersDisplay(isZoomed2X);
                 updateQuantitySummary();
 
-                const { remainingQty } = getQuantityStats();
-                const statusMsg = `No.${payload.tree_id} ${shortAction} · 잔여 ${remainingQty.toLocaleString()}주`;
-                setStatusBanner(statusMsg, 'success');
-                updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
+                const { totalQty, remainingQty } = getQuantityStats();
+                const isAllFinished = totalQty > 0 && remainingQty === 0;
 
-                playBeep(payload.finished ? 'success' : 'cancel');
+                if (isAllFinished) {
+                    setStatusBanner(`No.${payload.tree_id} ${actionLabel} · 모든 작업이 끝났습니다! (잔여 0주)`, 'all-done');
+                    updateDisplayBox(payload, true, `[${actionLabel} · 전체 완료]`);
+                    playAllDoneNotification();
+                } else {
+                    const statusMsg = `No.${payload.tree_id} ${actionLabel} · 잔여 ${remainingQty.toLocaleString()}주`;
+                    setStatusBanner(statusMsg, 'success');
+                    updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
+                    playBeep(payload.finished ? 'success' : 'cancel');
+                }
             })
             .catch(error => {
                 setStatusBanner(`전송 실패: ${error.message}`, 'error');
@@ -807,7 +819,7 @@
             const displayBox = document.getElementById('last-sent-box');
             const statusTitle = document.getElementById('status-title');
             const displayInfo = document.getElementById('last-sent-info');
-            const stateText = payload.finished ? "작업완료(true)" : "작업취소(false)";
+            const stateText = payload.finished ? "완료(true)" : "취소(false)";
 
             if (isSuccess) {
                 displayBox.style.backgroundColor = '#f0fdf4';
@@ -835,7 +847,7 @@
         };
 
         // -------------------------------------------------------------
-        // 10. Web Audio 비프음, 화면 알림 강조 및 음성 인식(STT) 제어
+        // 10. Web Audio 비프음, 전체 완료 팡파레/음성 및 STT 제어
         // -------------------------------------------------------------
         let audioCtx = null;
         let isMuted = false;
@@ -894,6 +906,55 @@
             }
         }
 
+        // 모든 작업 종료 시 재생되는 팡파레 비프음 + 음성 안내
+        function playAllDoneNotification() {
+            if (isMuted) return;
+
+            try {
+                // 일반 완료(2음)와 확실히 다른 4음 상승 팡파레(C5 - E5 - G5 - C6)
+                playTone(523.25, 0.00, 0.12, 'triangle', 0.3);
+                playTone(659.25, 0.13, 0.12, 'triangle', 0.3);
+                playTone(783.99, 0.26, 0.12, 'triangle', 0.32);
+                playTone(1046.50, 0.40, 0.32, 'sine', 0.35);
+            } catch (e) {
+                console.error("전체 완료 팡파레 오류:", e);
+            }
+
+            if ('speechSynthesis' in window) {
+                try {
+                    window.speechSynthesis.cancel();
+                    const utter = new SpeechSynthesisUtterance("모든 작업이 끝났습니다");
+                    utter.lang = 'ko-KR';
+                    utter.rate = 1.05;
+                    utter.volume = 1.0;
+
+                    if (recognition && isVoiceEnabled) {
+                        isSpeakingNow = true;
+                        try { recognition.stop(); } catch (e) {}
+                    }
+
+                    utter.onend = () => {
+                        isSpeakingNow = false;
+                        if (recognition && isVoiceEnabled) {
+                            scheduleRecognitionRestart(200);
+                        }
+                    };
+                    utter.onerror = () => {
+                        isSpeakingNow = false;
+                        if (recognition && isVoiceEnabled) {
+                            scheduleRecognitionRestart(200);
+                        }
+                    };
+
+                    setTimeout(() => {
+                        window.speechSynthesis.speak(utter);
+                    }, 350);
+                } catch (e) {
+                    isSpeakingNow = false;
+                }
+            }
+        }
+
         function updateMuteButtonUI() {
             const btn = document.getElementById('mute-btn');
             if (!btn) return;
@@ -909,12 +970,15 @@
         window.toggleMuteAlert = function() {
             isMuted = !isMuted;
             updateMuteButtonUI();
+            if (isMuted && 'speechSynthesis' in window) {
+                try { window.speechSynthesis.cancel(); } catch (e) {}
+            }
             if (!isMuted) {
                 ensureAudioContext();
                 playBeep('info');
-                setStatusBanner("비프음 알림 켜짐", 'normal');
+                setStatusBanner("알림 소리 켜짐", 'normal');
             } else {
-                setStatusBanner("비프음 음소거 상태 (화면 알림만 표시)", 'normal');
+                setStatusBanner("알림 음소거 상태 (화면 알림만 표시)", 'normal');
             }
         };
 
@@ -924,8 +988,8 @@
                 updateMuteButtonUI();
             }
             const { remainingQty } = getQuantityStats();
-            setStatusBanner(`비프음 테스트 · 잔여 ${remainingQty.toLocaleString()}주`, 'success');
-            playBeep('success');
+            setStatusBanner(`전체 완료 알림 테스트 · 잔여 ${remainingQty.toLocaleString()}주`, 'all-done');
+            playAllDoneNotification();
         };
 
         function setStatusBanner(msg, styleType = 'normal') {
@@ -936,9 +1000,11 @@
             bar.style.display = 'block';
             textEl.textContent = msg;
 
-            bar.classList.remove('alert-success', 'alert-error');
+            bar.classList.remove('alert-success', 'alert-all-done', 'alert-error');
             if (styleType === 'success') {
                 bar.classList.add('alert-success');
+            } else if (styleType === 'all-done') {
+                bar.classList.add('alert-all-done');
             } else if (styleType === 'error') {
                 bar.classList.add('alert-error');
             }
@@ -948,8 +1014,8 @@
             }
             if (styleType !== 'normal') {
                 statusHighlightTimer = setTimeout(() => {
-                    bar.classList.remove('alert-success', 'alert-error');
-                }, 2500);
+                    bar.classList.remove('alert-success', 'alert-all-done', 'alert-error');
+                }, 4000);
             }
         }
 
@@ -958,11 +1024,11 @@
         let recognition = null;
         let isVoiceEnabled = false;
         let isRecognizing = false;
+        let isSpeakingNow = false;
         let restartTimer = null;
         let lastCommandTime = 0;
         let lastHandledKey = "";
 
-        // 한글 숫자(백/십/단위)를 아라비아 숫자로 변환
         function convertKoreanNumberToken(token) {
             if (!token) return "";
             if (/^\d+$/.test(token)) return String(parseInt(token, 10));
@@ -998,7 +1064,6 @@
 
         function normalizeKoreanSpeech(raw) {
             let s = (raw || "").trim().replace(/\s+/g, "");
-            // "<한글숫자>번" 형태를 "<아라비아숫자>번"으로 변환
             s = s.replace(/([영공일이삼사오육칠팔구십백]+)번/g, (_, numPart) => {
                 const converted = convertKoreanNumberToken(numPart);
                 return converted ? `${converted}번` : `${numPart}번`;
@@ -1019,7 +1084,7 @@
         function directSendByNumber(rawNo, finishedState, rawTranscript) {
             const targetNo = String(parseInt(rawNo, 10));
             const found = markerList.find(item => String(item.no).trim() === targetNo);
-            const actionName = finishedState ? "작업완료" : "작업취소";
+            const actionName = finishedState ? "완료" : "취소";
 
             if (!found) {
                 setStatusBanner(`"${rawTranscript}" 인식 → ${targetNo}번 마커를 찾을 수 없습니다.`, 'error');
@@ -1042,8 +1107,8 @@
         function handleVoiceCommand(transcript) {
             const normalized = normalizeKoreanSpeech(transcript);
 
-            // 1) "<숫자>번 작업완료" 또는 "<숫자>번 완료"
-            const directCompleteMatch = normalized.match(/(\d+)\s*번\s*(?:작업완료|완료)/);
+            // 1) "<숫자>번 완료" (기존 "작업완료"도 호환)
+            const directCompleteMatch = normalized.match(/(\d+)\s*번?\s*(?:작업완료|완료)/);
             if (directCompleteMatch && directCompleteMatch[1]) {
                 const targetNo = String(parseInt(directCompleteMatch[1], 10));
                 if (shouldSkipDuplicate(`direct-done:${targetNo}`)) return;
@@ -1051,8 +1116,8 @@
                 return;
             }
 
-            // 2) "<숫자>번 작업취소" 또는 "<숫자>번 취소"
-            const directCancelMatch = normalized.match(/(\d+)\s*번\s*(?:작업취소|취소)/);
+            // 2) "<숫자>번 취소" (기존 "작업취소"도 호환)
+            const directCancelMatch = normalized.match(/(\d+)\s*번?\s*(?:작업취소|취소)/);
             if (directCancelMatch && directCancelMatch[1]) {
                 const targetNo = String(parseInt(directCancelMatch[1], 10));
                 if (shouldSkipDuplicate(`direct-cancel:${targetNo}`)) return;
@@ -1060,22 +1125,22 @@
                 return;
             }
 
-            // 3) 번호 없이 단독 "작업완료"
-            if (normalized.includes("작업완료")) {
+            // 3) 단독 "완료" (기존 "작업완료"도 호환)
+            if (/(?:^|[^가-힣])(?:작업완료|완료)(?:$|[^가-힣])/.test(normalized)) {
                 const currentTreeId = document.getElementById('treeId').value;
                 if (shouldSkipDuplicate(`done:${currentTreeId || 'none'}`)) return;
                 if (!currentTreeId) {
-                    setStatusBanner(`"${transcript}" 인식 → 번호를 함께 말하거나 먼저 선택해 주세요 (예: "14번 작업완료")`, 'normal');
+                    setStatusBanner(`"${transcript}" 인식 → 번호를 함께 말하거나 먼저 선택해 주세요 (예: "14번 완료")`, 'normal');
                     return;
                 }
                 document.getElementById('finished').value = "true";
-                setStatusBanner(`"${transcript}" 인식 → No.${currentTreeId} 작업완료 전송 중...`, 'normal');
+                setStatusBanner(`"${transcript}" 인식 → No.${currentTreeId} 완료 전송 중...`, 'normal');
                 sendToNotion({ finished: true });
                 return;
             }
 
-            // 4) 번호 없이 단독 "작업취소"
-            if (normalized.includes("작업취소")) {
+            // 4) 단독 "취소" (기존 "작업취소"도 호환)
+            if (/(?:^|[^가-힣])(?:작업취소|취소)(?:$|[^가-힣])/.test(normalized)) {
                 const currentTreeId = document.getElementById('treeId').value;
                 if (shouldSkipDuplicate(`cancel:${currentTreeId || 'none'}`)) return;
                 if (!currentTreeId) {
@@ -1083,7 +1148,7 @@
                     return;
                 }
                 document.getElementById('finished').value = "false";
-                setStatusBanner(`"${transcript}" 인식 → No.${currentTreeId} 작업취소 전송 중...`, 'normal');
+                setStatusBanner(`"${transcript}" 인식 → No.${currentTreeId} 취소 전송 중...`, 'normal');
                 sendToNotion({ finished: false });
                 return;
             }
@@ -1105,8 +1170,8 @@
                 return;
             }
 
-            // 7) "<숫자>번" (뒤에 "클릭", "작업시작", "선택"이 붙거나 단독 "<숫자>번")
-            const numMatch = normalized.match(/(\d+)\s*번(?:\s*(?:클릭|작업시작|선택))?/);
+            // 7) "<숫자>번 시작" / "<숫자>번 클릭" / "<숫자>번" (기존 "작업시작"도 호환)
+            const numMatch = normalized.match(/(\d+)\s*번(?:\s*(?:시작|작업시작|클릭|선택))?/);
             if (numMatch && numMatch[1]) {
                 const targetNo = String(parseInt(numMatch[1], 10));
                 if (shouldSkipDuplicate(`select:${targetNo}`)) return;
@@ -1114,7 +1179,7 @@
                 const found = markerList.find(item => String(item.no).trim() === targetNo);
                 if (found) {
                     selectMarkerByItem(found);
-                    setStatusBanner(`"${transcript}" 인식 → ${found.no}번 마커 선택 및 깜빡임 시작`, 'success');
+                    setStatusBanner(`"${transcript}" 인식 → ${found.no}번 시작(마커 선택 및 깜빡임)`, 'success');
                     playBeep('info');
                 } else {
                     setStatusBanner(`"${transcript}" 인식 → ${targetNo}번 마커를 찾을 수 없습니다.`, 'error');
@@ -1123,11 +1188,11 @@
                 return;
             }
 
-            setStatusBanner(`인식됨: "${transcript}" (명령: "15번 작업시작", "작업완료", "14번 작업완료")`, 'normal');
+            setStatusBanner(`인식됨: "${transcript}" (명령: "15번 시작", "완료", "14번 완료", "취소")`, 'normal');
         }
 
         function safeStartRecognition() {
-            if (!recognition || !isVoiceEnabled || isRecognizing) return;
+            if (!recognition || !isVoiceEnabled || isRecognizing || isSpeakingNow) return;
             try {
                 recognition.start();
             } catch (e) {
@@ -1144,7 +1209,7 @@
                 clearTimeout(restartTimer);
                 restartTimer = null;
             }
-            if (!isVoiceEnabled || isRecognizing) return;
+            if (!isVoiceEnabled || isRecognizing || isSpeakingNow) return;
             restartTimer = setTimeout(() => {
                 safeStartRecognition();
             }, delayMs);
@@ -1162,6 +1227,7 @@
             };
 
             rec.onresult = (event) => {
+                if (isSpeakingNow) return;
                 let latestTranscript = "";
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     latestTranscript = event.results[i][0].transcript;
@@ -1196,7 +1262,7 @@
 
             rec.onend = () => {
                 isRecognizing = false;
-                if (isVoiceEnabled) {
+                if (isVoiceEnabled && !isSpeakingNow) {
                     scheduleRecognitionRestart(250);
                 }
             };
@@ -1235,7 +1301,7 @@
                 if (panel.classList.contains('collapsed')) {
                     togglePanel();
                 }
-                setStatusBanner('마이크 켜짐 — "15번 작업시작" 후 "작업완료", 또는 "14번 작업완료"라고 말씀해 주세요.', 'normal');
+                setStatusBanner('마이크 켜짐 — "15번 시작" 후 "완료", 또는 "14번 완료"라고 말씀해 주세요.', 'normal');
                 safeStartRecognition();
             } else {
                 isVoiceEnabled = false;
