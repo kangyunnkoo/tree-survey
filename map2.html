@@ -116,7 +116,7 @@
             color: #d32f2f;
         }
 
-        /* 하단 입력 패널 (내용에 따라 높이 유동 조절) */
+        /* 하단 입력 패널 (항상 열려 있고 내용에 따라 높이 유동 조절) */
         #panel {
             width: 100%;
             max-height: 45vh;
@@ -128,11 +128,9 @@
             z-index: 10;
             display: flex;
             flex-direction: column;
-            transition: all 0.25s ease;
         }
-        #panel.collapsed { max-height: 36px; }
 
-        #panel-toggle-bar {
+        #panel-header-bar {
             height: 36px;
             flex-shrink: 0;
             background: #f1f3f5;
@@ -147,15 +145,11 @@
             border-bottom: 1px solid #dee2e6;
             user-select: none;
         }
-        .toggle-title-area {
+        .header-title-text {
             flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
             overflow: hidden;
+            text-overflow: ellipsis;
             white-space: nowrap;
-            gap: 4px;
         }
         .bar-btn {
             background: #ffffff;
@@ -223,7 +217,6 @@
             overflow-y: auto;
             box-sizing: border-box;
         }
-        #panel.collapsed #panel-body { display: none; }
 
         /* 모바일 및 다양한 화면 너비에 맞춰 유동적으로 줄바꿈되는 입력 영역 */
         .input-row-inline {
@@ -339,13 +332,10 @@
         <div id="map"></div>
     </div>
 
-    <!-- 하단 입력 폼 패널 -->
-    <div id="panel" class="">
-        <div id="panel-toggle-bar">
-            <div class="toggle-title-area" onclick="togglePanel()">
-                <span>🌳 작업·노션 전송</span>
-                <span id="toggle-arrow">▲ 숨기기</span>
-            </div>
+    <!-- 하단 입력 폼 패널 (항상 열려 있음) -->
+    <div id="panel">
+        <div id="panel-header-bar">
+            <span class="header-title-text">🌳 작업·노션 전송</span>
             <button id="test-voice-btn" class="bar-btn" type="button" onclick="testBeepAlert()">🔔 비프테스트</button>
             <button id="mute-btn" class="bar-btn" type="button" onclick="toggleMuteAlert()">🔊 알림 ON</button>
             <button id="voice-btn" class="bar-btn" type="button" onclick="toggleVoiceRecognition()">🎙️ 음성 OFF</button>
@@ -353,7 +343,7 @@
 
         <div id="panel-body">
             <div id="voice-status-bar">
-                <strong>🎙️ 상태:</strong> <span id="voice-status-text">대기 중 ("15번 시작", "완료", "14번 완료", "취소")</span>
+                <strong>🎙️ 상태:</strong> <span id="voice-status-text">대기 중 ("15번 시작", "완료", "14번 완료", "14번 취소")</span>
             </div>
 
             <!-- 화면 크기에 따라 유동적으로 줄바꿈되는 입력 및 전송 영역 -->
@@ -582,13 +572,8 @@
             if (!item) return;
             populateFormOnly(item);
             startBlinking(item);
-
             map.setCenter(new kakao.maps.LatLng(item.lat, item.lng));
-
-            const panel = document.getElementById('panel');
-            if (panel.classList.contains('collapsed')) {
-                togglePanel();
-            }
+            setTimeout(() => { map.relayout(); }, 100);
         }
 
         function syncFormByFinishedState(isFinished) {
@@ -629,23 +614,7 @@
         }
 
         // -------------------------------------------------------------
-        // 7. 하단 패널 토글 제어
-        // -------------------------------------------------------------
-        window.togglePanel = function() {
-            const panel = document.getElementById('panel');
-            const toggleArrow = document.getElementById('toggle-arrow');
-            
-            panel.classList.toggle('collapsed');
-            if (panel.classList.contains('collapsed')) {
-                toggleArrow.textContent = "▼ 펼치기";
-            } else {
-                toggleArrow.textContent = "▲ 숨기기";
-            }
-            setTimeout(() => { map.relayout(); }, 250);
-        };
-
-        // -------------------------------------------------------------
-        // 8. 데이터 로드 및 마커 생성 (단일 웹훅 action=load 사용)
+        // 7. 데이터 로드 및 마커 생성 (단일 웹훅 action=load 사용)
         // -------------------------------------------------------------
         async function loadMarkerData() {
             if (!masterId) return [];
@@ -711,7 +680,7 @@
         }
 
         // -------------------------------------------------------------
-        // 9. 노션 전송 및 재전송 처리 (단일 웹훅 action=update 사용)
+        // 8. 노션 전송 및 재전송 처리 (단일 웹훅 action=update 사용)
         // -------------------------------------------------------------
         window.sendToNotion = function(overrideOptions = null) {
             const treeId = overrideOptions && overrideOptions.treeId !== undefined
@@ -847,7 +816,7 @@
         };
 
         // -------------------------------------------------------------
-        // 10. Web Audio 비프음, 전체 완료 팡파레/음성 및 STT 제어
+        // 9. Web Audio 비프음, 전체 완료 팡파레/음성 및 STT 제어
         // -------------------------------------------------------------
         let audioCtx = null;
         let isMuted = false;
@@ -891,13 +860,16 @@
             if (isMuted) return;
             try {
                 if (mode === 'success') {
+                    // 완료: 밝고 상승하는 2음 (A5 -> D6)
                     playTone(880, 0, 0.11, 'sine', 0.25);
                     playTone(1174.66, 0.13, 0.15, 'sine', 0.25);
                 } else if (mode === 'cancel') {
-                    playTone(587.33, 0, 0.12, 'triangle', 0.25);
-                    playTone(440, 0.14, 0.16, 'triangle', 0.25);
+                    // 취소: 확실히 구분되는 저음 3연타 하강음 (G4 -> E4 -> C4, sawtooth)
+                    playTone(392.00, 0.00, 0.09, 'sawtooth', 0.22);
+                    playTone(329.63, 0.11, 0.09, 'sawtooth', 0.22);
+                    playTone(261.63, 0.22, 0.16, 'sawtooth', 0.24);
                 } else if (mode === 'error') {
-                    playTone(260, 0, 0.25, 'sawtooth', 0.2);
+                    playTone(220, 0, 0.25, 'sawtooth', 0.22);
                 } else {
                     playTone(784, 0, 0.12, 'sine', 0.22);
                 }
@@ -906,12 +878,10 @@
             }
         }
 
-        // 모든 작업 종료 시 재생되는 팡파레 비프음 + 음성 안내
         function playAllDoneNotification() {
             if (isMuted) return;
 
             try {
-                // 일반 완료(2음)와 확실히 다른 4음 상승 팡파레(C5 - E5 - G5 - C6)
                 playTone(523.25, 0.00, 0.12, 'triangle', 0.3);
                 playTone(659.25, 0.13, 0.12, 'triangle', 0.3);
                 playTone(783.99, 0.26, 0.12, 'triangle', 0.32);
@@ -1107,28 +1077,25 @@
         function handleVoiceCommand(transcript) {
             const normalized = normalizeKoreanSpeech(transcript);
 
-            // 1) "<숫자>번 완료" (기존 "작업완료"도 호환)
             const directCompleteMatch = normalized.match(/(\d+)\s*번?\s*(?:작업완료|완료)/);
             if (directCompleteMatch && directCompleteMatch[1]) {
                 const targetNo = String(parseInt(directCompleteMatch[1], 10));
-                if (shouldSkipDuplicate(`direct-done:${targetNo}`)) return;
+                if (shouldSkipDuplicate(`state:${targetNo}:done`)) return;
                 directSendByNumber(targetNo, true, transcript);
                 return;
             }
 
-            // 2) "<숫자>번 취소" (기존 "작업취소"도 호환)
             const directCancelMatch = normalized.match(/(\d+)\s*번?\s*(?:작업취소|취소)/);
             if (directCancelMatch && directCancelMatch[1]) {
                 const targetNo = String(parseInt(directCancelMatch[1], 10));
-                if (shouldSkipDuplicate(`direct-cancel:${targetNo}`)) return;
+                if (shouldSkipDuplicate(`state:${targetNo}:cancel`)) return;
                 directSendByNumber(targetNo, false, transcript);
                 return;
             }
 
-            // 3) 단독 "완료" (기존 "작업완료"도 호환)
             if (/(?:^|[^가-힣])(?:작업완료|완료)(?:$|[^가-힣])/.test(normalized)) {
                 const currentTreeId = document.getElementById('treeId').value;
-                if (shouldSkipDuplicate(`done:${currentTreeId || 'none'}`)) return;
+                if (shouldSkipDuplicate(`state:${currentTreeId || 'none'}:done`)) return;
                 if (!currentTreeId) {
                     setStatusBanner(`"${transcript}" 인식 → 번호를 함께 말하거나 먼저 선택해 주세요 (예: "14번 완료")`, 'normal');
                     return;
@@ -1139,10 +1106,9 @@
                 return;
             }
 
-            // 4) 단독 "취소" (기존 "작업취소"도 호환)
             if (/(?:^|[^가-힣])(?:작업취소|취소)(?:$|[^가-힣])/.test(normalized)) {
                 const currentTreeId = document.getElementById('treeId').value;
-                if (shouldSkipDuplicate(`cancel:${currentTreeId || 'none'}`)) return;
+                if (shouldSkipDuplicate(`state:${currentTreeId || 'none'}:cancel`)) return;
                 if (!currentTreeId) {
                     setStatusBanner(`"${transcript}" 인식 → 번호를 함께 말하거나 먼저 선택해 주세요`, 'normal');
                     return;
@@ -1153,7 +1119,6 @@
                 return;
             }
 
-            // 5) 남은 주수 조회
             if (normalized.includes("남은주수") || normalized.includes("몇주남았")) {
                 if (shouldSkipDuplicate("remain-qty")) return;
                 const { remainingQty } = getQuantityStats();
@@ -1162,7 +1127,6 @@
                 return;
             }
 
-            // 6) 깜빡임 중지
             if (normalized.includes("깜빡임끄기") || normalized.includes("선택취소")) {
                 if (shouldSkipDuplicate("stop-blink")) return;
                 stopBlinking();
@@ -1170,7 +1134,6 @@
                 return;
             }
 
-            // 7) "<숫자>번 시작" / "<숫자>번 클릭" / "<숫자>번" (기존 "작업시작"도 호환)
             const numMatch = normalized.match(/(\d+)\s*번(?:\s*(?:시작|작업시작|클릭|선택))?/);
             if (numMatch && numMatch[1]) {
                 const targetNo = String(parseInt(numMatch[1], 10));
@@ -1179,7 +1142,8 @@
                 const found = markerList.find(item => String(item.no).trim() === targetNo);
                 if (found) {
                     selectMarkerByItem(found);
-                    setStatusBanner(`"${transcript}" 인식 → ${found.no}번 시작(마커 선택 및 깜빡임)`, 'success');
+                    const nextActionText = found.finished ? "완료됨 → '취소' 가능" : "미완료 → '완료' 가능";
+                    setStatusBanner(`"${transcript}" 인식 → ${found.no}번 선택 (${nextActionText})`, 'success');
                     playBeep('info');
                 } else {
                     setStatusBanner(`"${transcript}" 인식 → ${targetNo}번 마커를 찾을 수 없습니다.`, 'error');
@@ -1188,7 +1152,7 @@
                 return;
             }
 
-            setStatusBanner(`인식됨: "${transcript}" (명령: "15번 시작", "완료", "14번 완료", "취소")`, 'normal');
+            setStatusBanner(`인식됨: "${transcript}" (명령: "15번 시작", "완료", "14번 완료", "14번 취소")`, 'normal');
         }
 
         function safeStartRecognition() {
@@ -1297,11 +1261,7 @@
             if (!isVoiceEnabled) {
                 isVoiceEnabled = true;
                 updateVoiceButtonUI();
-                const panel = document.getElementById('panel');
-                if (panel.classList.contains('collapsed')) {
-                    togglePanel();
-                }
-                setStatusBanner('마이크 켜짐 — "15번 시작" 후 "완료", 또는 "14번 완료"라고 말씀해 주세요.', 'normal');
+                setStatusBanner('마이크 켜짐 — "15번 시작" 후 "완료", "14번 완료", "14번 취소"라고 말씀해 주세요.', 'normal');
                 safeStartRecognition();
             } else {
                 isVoiceEnabled = false;
