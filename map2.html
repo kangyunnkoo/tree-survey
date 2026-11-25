@@ -140,7 +140,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 0 10px;
-            gap: 8px;
+            gap: 6px;
             font-size: 13px;
             font-weight: bold;
             color: #495057;
@@ -156,7 +156,7 @@
             overflow: hidden;
             white-space: nowrap;
         }
-        .voice-btn {
+        .bar-btn {
             background: #ffffff;
             color: #1e293b;
             border: 1px solid #94a3b8;
@@ -168,11 +168,16 @@
             white-space: nowrap;
             flex-shrink: 0;
         }
-        .voice-btn.listening {
+        .bar-btn.listening {
             background: #dc2626;
             color: #ffffff;
             border-color: #dc2626;
             animation: pulseMic 1.2s infinite;
+        }
+        .bar-btn.muted {
+            background: #e2e8f0;
+            color: #475569;
+            border-color: #cbd5e1;
         }
         @keyframes pulseMic {
             0%, 100% { opacity: 1; }
@@ -321,7 +326,8 @@
                 <span>🌳 나무주사 작업 입력 및 노션 전송 폼</span>
                 <span id="toggle-arrow">▲ 폼 숨기기</span>
             </div>
-            <button id="voice-btn" class="voice-btn" type="button" onclick="toggleVoiceRecognition()">🎙️ 음성인식 OFF</button>
+            <button id="mute-btn" class="bar-btn" type="button" onclick="toggleMuteSpeech()">🔊 안내 ON</button>
+            <button id="voice-btn" class="bar-btn" type="button" onclick="toggleVoiceRecognition()">🎙️ 음성인식 OFF</button>
         </div>
 
         <div id="panel-body">
@@ -544,7 +550,6 @@
             }, 400);
         }
 
-        // 마커 클릭 및 음성 번호 호출 시 공통 실행 함수
         function selectMarkerByItem(item) {
             if (!item) return;
             document.getElementById('treeId').value = item.no;
@@ -554,7 +559,6 @@
             syncFormByFinishedState(item.finished);
             startBlinking(item);
 
-            // 선택된 마커 위치로 지도 중심 이동
             map.setCenter(new kakao.maps.LatLng(item.lat, item.lng));
 
             const panel = document.getElementById('panel');
@@ -578,7 +582,7 @@
             }
         }
 
-        function updateQuantitySummary() {
+        function getQuantityStats() {
             let totalQty = 0;
             let doneQty = 0;
 
@@ -590,6 +594,12 @@
                 }
             });
 
+            const remainingQty = Math.max(0, totalQty - doneQty);
+            return { totalQty, doneQty, remainingQty };
+        }
+
+        function updateQuantitySummary() {
+            const { totalQty, doneQty } = getQuantityStats();
             document.getElementById('total-qty-text').textContent = totalQty.toLocaleString();
             document.getElementById('done-qty-text').textContent = doneQty.toLocaleString();
         }
@@ -726,8 +736,7 @@
             })
             .then(data => {
                 const actionLabel = payload.finished ? "작업완료" : "작업취소";
-                setVoiceStatus(`노션 DB에 [${actionLabel}] 반영 완료 (No.${payload.tree_id})`);
-                updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
+                const shortAction = payload.finished ? "완료" : "취소";
 
                 const target = markerList.find(item => String(item.no) === String(payload.tree_id));
                 if (target) {
@@ -741,6 +750,14 @@
                 stopBlinking();
                 updateMarkersDisplay(isZoomed2X);
                 updateQuantitySummary();
+
+                const { remainingQty } = getQuantityStats();
+                const statusMsg = `No.${payload.tree_id} ${shortAction} · 잔여 ${remainingQty.toLocaleString()}주`;
+                setVoiceStatus(statusMsg);
+                updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
+
+                // 짧고 간결한 음성 안내
+                speakText(`${payload.tree_id}번 ${shortAction}, 잔여 ${remainingQty}주`);
             })
             .catch(error => {
                 setVoiceStatus(`전송 실패: ${error.message}`);
@@ -785,13 +802,71 @@
         };
 
         // -------------------------------------------------------------
-        // 10. 음성 인식 (Web Speech API) 제어
+        // 10. 음성 인식 (STT), 음소거 토글 및 음성 안내 (TTS) 제어
         // -------------------------------------------------------------
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition = null;
         let isVoiceEnabled = false;
+        let isMuted = false;
+        let isSpeakingNow = false;
         let lastCommandTime = 0;
         let lastHandledTranscript = "";
+
+        function updateMuteButtonUI() {
+            const btn = document.getElementById('mute-btn');
+            if (!btn) return;
+            if (isMuted) {
+                btn.textContent = "🔇 음소거 ON";
+                btn.classList.add("muted");
+            } else {
+                btn.textContent = "🔊 안내 ON";
+                btn.classList.remove("muted");
+            }
+        }
+
+        window.toggleMuteSpeech = function() {
+            isMuted = !isMuted;
+            if (isMuted && 'speechSynthesis' in window) {
+                try { window.speechSynthesis.cancel(); } catch (e) {}
+            }
+            updateMuteButtonUI();
+            setVoiceStatus(isMuted ? "음성 안내 음소거 상태입니다." : "음성 안내가 켜졌습니다.");
+        };
+
+        function speakText(message) {
+            if (isMuted || !('speechSynthesis' in window) || !message) return;
+
+            try {
+                window.speechSynthesis.cancel();
+                const utter = new SpeechSynthesisUtterance(message);
+                utter.lang = 'ko-KR';
+                utter.rate = 1.1;
+
+                if (recognition && isVoiceEnabled) {
+                    isSpeakingNow = true;
+                    try { recognition.stop(); } catch (e) {}
+                }
+
+                utter.onend = () => {
+                    isSpeakingNow = false;
+                    if (recognition && isVoiceEnabled) {
+                        try { recognition.start(); } catch (e) {}
+                    }
+                };
+
+                utter.onerror = () => {
+                    isSpeakingNow = false;
+                    if (recognition && isVoiceEnabled) {
+                        try { recognition.start(); } catch (e) {}
+                    }
+                };
+
+                window.speechSynthesis.speak(utter);
+            } catch (e) {
+                isSpeakingNow = false;
+                console.error("음성 안내 오류:", e);
+            }
+        }
 
         function setVoiceStatus(msg) {
             const bar = document.getElementById('voice-status-bar');
@@ -802,11 +877,9 @@
             }
         }
 
-        // 한글 숫자/공백 정규화 (예: "십오번 클릭" -> "15번 클릭")
         function normalizeKoreanSpeech(raw) {
             let s = (raw || "").trim().replace(/\s+/g, "");
             const korDigits = { "영": "0", "공": "0", "일": "1", "이": "2", "삼": "3", "사": "4", "오": "5", "육": "6", "칠": "7", "팔": "8", "구": "9" };
-            // "십오" -> "15", "이십삼" -> "23" 형태 간단 변환
             s = s.replace(/([일이삼사오육칠팔구])?십([일이삼사오육칠팔구])?/g, (_, tens, ones) => {
                 const t = tens ? korDigits[tens] : "1";
                 const o = ones ? korDigits[ones] : "0";
@@ -820,12 +893,10 @@
             const normalized = normalizeKoreanSpeech(transcript);
             const now = Date.now();
 
-            // 연속 중간결과로 인한 중복 실행 방지 (1.2초 쿨다운)
             if (normalized === lastHandledTranscript && (now - lastCommandTime) < 1200) {
                 return;
             }
 
-            // 1) "작업완료" 명령
             if (normalized.includes("작업완료")) {
                 lastHandledTranscript = normalized;
                 lastCommandTime = now;
@@ -834,14 +905,12 @@
                     setVoiceStatus(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요 (예: "15번 클릭")`);
                     return;
                 }
-                // 완료 상태로 전송하도록 설정 후 전송
                 document.getElementById('finished').value = "true";
                 setVoiceStatus(`"${transcript}" 인식 → No.${currentTreeId} 작업완료 전송 중...`);
                 sendToNotion();
                 return;
             }
 
-            // 2) "작업취소" 명령
             if (normalized.includes("작업취소")) {
                 lastHandledTranscript = normalized;
                 lastCommandTime = now;
@@ -856,7 +925,15 @@
                 return;
             }
 
-            // 3) 깜빡임 중지 명령
+            if (normalized.includes("남은주수") || normalized.includes("몇주남았")) {
+                lastHandledTranscript = normalized;
+                lastCommandTime = now;
+                const { remainingQty } = getQuantityStats();
+                setVoiceStatus(`잔여 ${remainingQty.toLocaleString()}주`);
+                speakText(`잔여 ${remainingQty}주`);
+                return;
+            }
+
             if (normalized.includes("깜빡임끄기") || normalized.includes("선택취소")) {
                 lastHandledTranscript = normalized;
                 lastCommandTime = now;
@@ -865,7 +942,6 @@
                 return;
             }
 
-            // 4) "<숫자>번 클릭" 또는 "<숫자>번 작업시작" (또는 "<숫자>번")
             const numMatch = normalized.match(/(\d+)\s*번(?:\s*(?:클릭|작업시작|선택))?/) ||
                              (normalized.includes("클릭") || normalized.includes("작업시작") ? normalized.match(/(\d+)/) : null);
 
@@ -884,7 +960,7 @@
                 return;
             }
 
-            setVoiceStatus(`인식됨: "${transcript}" (지원 명령: "15번 클릭", "15번 작업시작", "작업완료")`);
+            setVoiceStatus(`인식됨: "${transcript}" (명령: "15번 클릭", "15번 작업시작", "작업완료", "남은주수")`);
         }
 
         function initSpeechRecognition() {
@@ -895,6 +971,7 @@
             rec.interimResults = true;
 
             rec.onresult = (event) => {
+                if (isSpeakingNow) return;
                 let latestTranscript = "";
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     latestTranscript = event.results[i][0].transcript;
@@ -917,12 +994,10 @@
             };
 
             rec.onend = () => {
-                if (isVoiceEnabled) {
+                if (isVoiceEnabled && !isSpeakingNow) {
                     try {
                         rec.start();
-                    } catch (e) {
-                        // 이미 시작 중인 경우 무시
-                    }
+                    } catch (e) {}
                 }
             };
 
