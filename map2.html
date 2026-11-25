@@ -139,9 +139,9 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 10px;
-            gap: 6px;
-            font-size: 13px;
+            padding: 0 8px;
+            gap: 5px;
+            font-size: 12px;
             font-weight: bold;
             color: #495057;
             border-bottom: 1px solid #dee2e6;
@@ -155,13 +155,14 @@
             cursor: pointer;
             overflow: hidden;
             white-space: nowrap;
+            gap: 4px;
         }
         .bar-btn {
             background: #ffffff;
             color: #1e293b;
             border: 1px solid #94a3b8;
             border-radius: 5px;
-            padding: 4px 8px;
+            padding: 4px 6px;
             font-size: 11px;
             font-weight: bold;
             cursor: pointer;
@@ -323,11 +324,12 @@
     <div id="panel" class="">
         <div id="panel-toggle-bar">
             <div class="toggle-title-area" onclick="togglePanel()">
-                <span>🌳 나무주사 작업 입력 및 노션 전송 폼</span>
-                <span id="toggle-arrow">▲ 폼 숨기기</span>
+                <span>🌳 작업·노션 전송</span>
+                <span id="toggle-arrow">▲ 숨기기</span>
             </div>
+            <button id="test-voice-btn" class="bar-btn" type="button" onclick="testVoiceAnnouncement()">🔔 테스트</button>
             <button id="mute-btn" class="bar-btn" type="button" onclick="toggleMuteSpeech()">🔊 안내 ON</button>
-            <button id="voice-btn" class="bar-btn" type="button" onclick="toggleVoiceRecognition()">🎙️ 음성인식 OFF</button>
+            <button id="voice-btn" class="bar-btn" type="button" onclick="toggleVoiceRecognition()">🎙️ 음성 OFF</button>
         </div>
 
         <div id="panel-body">
@@ -613,9 +615,9 @@
             
             panel.classList.toggle('collapsed');
             if (panel.classList.contains('collapsed')) {
-                toggleArrow.textContent = "▼ 폼 펼치기";
+                toggleArrow.textContent = "▼ 펼치기";
             } else {
-                toggleArrow.textContent = "▲ 폼 숨기기";
+                toggleArrow.textContent = "▲ 숨기기";
             }
             setTimeout(() => { map.relayout(); }, 250);
         };
@@ -756,7 +758,6 @@
                 setVoiceStatus(statusMsg);
                 updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
 
-                // 짧고 간결한 음성 안내
                 speakText(`${payload.tree_id}번 ${shortAction}, 잔여 ${remainingQty}주`);
             })
             .catch(error => {
@@ -812,11 +813,26 @@
         let lastCommandTime = 0;
         let lastHandledTranscript = "";
 
+        if ('speechSynthesis' in window && typeof window.speechSynthesis.getVoices === 'function') {
+            window.speechSynthesis.getVoices();
+            window.speechSynthesis.onvoiceschanged = () => {
+                window.speechSynthesis.getVoices();
+            };
+        }
+
+        function pickKoreanVoice() {
+            if (!('speechSynthesis' in window) || typeof window.speechSynthesis.getVoices !== 'function') {
+                return null;
+            }
+            const voices = window.speechSynthesis.getVoices() || [];
+            return voices.find(v => (v.lang || '').toLowerCase().startsWith('ko')) || null;
+        }
+
         function updateMuteButtonUI() {
             const btn = document.getElementById('mute-btn');
             if (!btn) return;
             if (isMuted) {
-                btn.textContent = "🔇 음소거 ON";
+                btn.textContent = "🔇 음소거";
                 btn.classList.add("muted");
             } else {
                 btn.textContent = "🔊 안내 ON";
@@ -833,38 +849,71 @@
             setVoiceStatus(isMuted ? "음성 안내 음소거 상태입니다." : "음성 안내가 켜졌습니다.");
         };
 
+        window.testVoiceAnnouncement = function() {
+            if (!('speechSynthesis' in window)) {
+                alert("이 브라우저는 음성 안내(speechSynthesis)를 지원하지 않습니다.");
+                return;
+            }
+            if (isMuted) {
+                isMuted = false;
+                updateMuteButtonUI();
+            }
+            const { remainingQty } = getQuantityStats();
+            setVoiceStatus(`안내 테스트: 잔여 ${remainingQty.toLocaleString()}주`);
+            speakText(`잔여 ${remainingQty}주`);
+        };
+
         function speakText(message) {
             if (isMuted || !('speechSynthesis' in window) || !message) return;
 
-            try {
-                window.speechSynthesis.cancel();
-                const utter = new SpeechSynthesisUtterance(message);
-                utter.lang = 'ko-KR';
-                utter.rate = 1.1;
+            const runSpeak = () => {
+                try {
+                    window.speechSynthesis.cancel();
+                    const utter = new SpeechSynthesisUtterance(message);
+                    const koVoice = pickKoreanVoice();
+                    if (koVoice) {
+                        utter.voice = koVoice;
+                    }
+                    utter.lang = 'ko-KR';
+                    utter.rate = 1.05;
+                    utter.volume = 1.0;
 
-                if (recognition && isVoiceEnabled) {
-                    isSpeakingNow = true;
-                    try { recognition.stop(); } catch (e) {}
+                    utter.onend = () => {
+                        isSpeakingNow = false;
+                        if (recognition && isVoiceEnabled) {
+                            setTimeout(() => {
+                                if (isVoiceEnabled && !isSpeakingNow) {
+                                    try { recognition.start(); } catch (e) {}
+                                }
+                            }, 150);
+                        }
+                    };
+
+                    utter.onerror = (err) => {
+                        console.error("TTS 재생 오류:", err);
+                        isSpeakingNow = false;
+                        if (recognition && isVoiceEnabled) {
+                            try { recognition.start(); } catch (e) {}
+                        }
+                    };
+
+                    window.speechSynthesis.speak(utter);
+                } catch (e) {
+                    isSpeakingNow = false;
+                    console.error("음성 안내 오류:", e);
+                    if (recognition && isVoiceEnabled) {
+                        try { recognition.start(); } catch (err) {}
+                    }
                 }
+            };
 
-                utter.onend = () => {
-                    isSpeakingNow = false;
-                    if (recognition && isVoiceEnabled) {
-                        try { recognition.start(); } catch (e) {}
-                    }
-                };
-
-                utter.onerror = () => {
-                    isSpeakingNow = false;
-                    if (recognition && isVoiceEnabled) {
-                        try { recognition.start(); } catch (e) {}
-                    }
-                };
-
-                window.speechSynthesis.speak(utter);
-            } catch (e) {
-                isSpeakingNow = false;
-                console.error("음성 안내 오류:", e);
+            if (recognition && isVoiceEnabled) {
+                isSpeakingNow = true;
+                try { recognition.stop(); } catch (e) {}
+                setTimeout(runSpeak, 150);
+            } else {
+                isSpeakingNow = true;
+                runSpeak();
             }
         }
 
@@ -1008,10 +1057,10 @@
             const btn = document.getElementById('voice-btn');
             if (!btn) return;
             if (isVoiceEnabled) {
-                btn.textContent = "🎙️ 음성인식 ON";
+                btn.textContent = "🎙️ 음성 ON";
                 btn.classList.add("listening");
             } else {
-                btn.textContent = "🎙️ 음성인식 OFF";
+                btn.textContent = "🎙️ 음성 OFF";
                 btn.classList.remove("listening");
             }
         }
