@@ -162,7 +162,7 @@
             color: #1e293b;
             border: 1px solid #94a3b8;
             border-radius: 5px;
-            padding: 4px 6px;
+            padding: 4px 7px;
             font-size: 11px;
             font-weight: bold;
             cursor: pointer;
@@ -188,12 +188,25 @@
         #voice-status-bar {
             display: none;
             background: #eff6ff;
-            border: 1px solid #bfdbfe;
+            border: 1px solid #93c5fd;
             color: #1e3a8a;
             border-radius: 6px;
-            padding: 6px 10px;
+            padding: 7px 10px;
             font-size: 12px;
             line-height: 1.35;
+            transition: all 0.2s ease;
+        }
+        #voice-status-bar.alert-success {
+            background: #dcfce7;
+            border: 2px solid #16a34a;
+            color: #14532d;
+            font-weight: bold;
+        }
+        #voice-status-bar.alert-error {
+            background: #fee2e2;
+            border: 2px solid #dc2626;
+            color: #7f1d1d;
+            font-weight: bold;
         }
 
         #panel-body {
@@ -327,14 +340,14 @@
                 <span>🌳 작업·노션 전송</span>
                 <span id="toggle-arrow">▲ 숨기기</span>
             </div>
-            <button id="test-voice-btn" class="bar-btn" type="button" onclick="testVoiceAnnouncement()">🔔 테스트</button>
-            <button id="mute-btn" class="bar-btn" type="button" onclick="toggleMuteSpeech()">🔊 안내 ON</button>
+            <button id="test-voice-btn" class="bar-btn" type="button" onclick="testBeepAlert()">🔔 비프테스트</button>
+            <button id="mute-btn" class="bar-btn" type="button" onclick="toggleMuteAlert()">🔊 알림 ON</button>
             <button id="voice-btn" class="bar-btn" type="button" onclick="toggleVoiceRecognition()">🎙️ 음성 OFF</button>
         </div>
 
         <div id="panel-body">
             <div id="voice-status-bar">
-                <strong>🎙️ 음성명령:</strong> <span id="voice-status-text">대기 중 ("15번 클릭", "15번 작업시작", "작업완료")</span>
+                <strong>🎙️ 상태:</strong> <span id="voice-status-text">대기 중 ("15번 클릭", "15번 작업시작", "작업완료")</span>
             </div>
 
             <!-- 화면 크기에 따라 유동적으로 줄바꿈되는 입력 및 전송 영역 -->
@@ -387,7 +400,6 @@
         let activeBlinkItem = null; 
         let blinkTimer = null;      
 
-        // 지도 빈 곳 클릭 시 깜빡임 중지 기능
         kakao.maps.event.addListener(map, 'click', function() {
             stopBlinking();
         });
@@ -755,14 +767,15 @@
 
                 const { remainingQty } = getQuantityStats();
                 const statusMsg = `No.${payload.tree_id} ${shortAction} · 잔여 ${remainingQty.toLocaleString()}주`;
-                setVoiceStatus(statusMsg);
+                setStatusBanner(statusMsg, 'success');
                 updateDisplayBox(payload, true, `[${actionLabel} 성공]`);
 
-                speakText(`${payload.tree_id}번 ${shortAction}, 잔여 ${remainingQty}주`);
+                playBeep(payload.finished ? 'success' : 'cancel');
             })
             .catch(error => {
-                setVoiceStatus(`전송 실패: ${error.message}`);
+                setStatusBanner(`전송 실패: ${error.message}`, 'error');
                 updateDisplayBox(payload, false, '[전송 실패]');
+                playBeep('error');
             })
             .finally(() => {
                 sendBtn.disabled = false;
@@ -781,11 +794,13 @@
 
             if (isSuccess) {
                 displayBox.style.backgroundColor = '#f0fdf4';
-                displayBox.style.borderColor = '#2b8a3e';
-                statusTitle.style.color = '#2b8a3e';
+                displayBox.style.borderColor = '#16a34a';
+                displayBox.style.borderWidth = '2px';
+                statusTitle.style.color = '#15803d';
             } else {
                 displayBox.style.backgroundColor = '#fff5f5';
                 displayBox.style.borderColor = '#e03131';
+                displayBox.style.borderWidth = '2px';
                 statusTitle.style.color = '#e03131';
             }
 
@@ -803,29 +818,63 @@
         };
 
         // -------------------------------------------------------------
-        // 10. 음성 인식 (STT), 음소거 토글 및 음성 안내 (TTS) 제어
+        // 10. Web Audio 비프음, 화면 알림 강조 및 음성 인식(STT) 제어
         // -------------------------------------------------------------
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition = null;
-        let isVoiceEnabled = false;
+        let audioCtx = null;
         let isMuted = false;
-        let isSpeakingNow = false;
-        let lastCommandTime = 0;
-        let lastHandledTranscript = "";
+        let statusHighlightTimer = null;
 
-        if ('speechSynthesis' in window && typeof window.speechSynthesis.getVoices === 'function') {
-            window.speechSynthesis.getVoices();
-            window.speechSynthesis.onvoiceschanged = () => {
-                window.speechSynthesis.getVoices();
-            };
+        function ensureAudioContext() {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return null;
+            if (!audioCtx) {
+                audioCtx = new AudioContextClass();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+            return audioCtx;
         }
 
-        function pickKoreanVoice() {
-            if (!('speechSynthesis' in window) || typeof window.speechSynthesis.getVoices !== 'function') {
-                return null;
+        function playTone(freq, startOffsetSec, durationSec, type = 'sine', gainPeak = 0.25) {
+            const ctx = ensureAudioContext();
+            if (!ctx) return;
+
+            const now = ctx.currentTime + startOffsetSec;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, now);
+
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(gainPeak, now + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + durationSec + 0.02);
+        }
+
+        function playBeep(mode = 'success') {
+            if (isMuted) return;
+            try {
+                if (mode === 'success') {
+                    playTone(880, 0, 0.11, 'sine', 0.25);
+                    playTone(1174.66, 0.13, 0.15, 'sine', 0.25);
+                } else if (mode === 'cancel') {
+                    playTone(587.33, 0, 0.12, 'triangle', 0.25);
+                    playTone(440, 0.14, 0.16, 'triangle', 0.25);
+                } else if (mode === 'error') {
+                    playTone(260, 0, 0.25, 'sawtooth', 0.2);
+                } else {
+                    playTone(784, 0, 0.12, 'sine', 0.22);
+                }
+            } catch (e) {
+                console.error("비프음 재생 오류:", e);
             }
-            const voices = window.speechSynthesis.getVoices() || [];
-            return voices.find(v => (v.lang || '').toLowerCase().startsWith('ko')) || null;
         }
 
         function updateMuteButtonUI() {
@@ -835,96 +884,66 @@
                 btn.textContent = "🔇 음소거";
                 btn.classList.add("muted");
             } else {
-                btn.textContent = "🔊 안내 ON";
+                btn.textContent = "🔊 알림 ON";
                 btn.classList.remove("muted");
             }
         }
 
-        window.toggleMuteSpeech = function() {
+        window.toggleMuteAlert = function() {
             isMuted = !isMuted;
-            if (isMuted && 'speechSynthesis' in window) {
-                try { window.speechSynthesis.cancel(); } catch (e) {}
-            }
             updateMuteButtonUI();
-            setVoiceStatus(isMuted ? "음성 안내 음소거 상태입니다." : "음성 안내가 켜졌습니다.");
+            if (!isMuted) {
+                ensureAudioContext();
+                playBeep('info');
+                setStatusBanner("비프음 알림 켜짐", 'normal');
+            } else {
+                setStatusBanner("비프음 음소거 상태 (화면 알림만 표시)", 'normal');
+            }
         };
 
-        window.testVoiceAnnouncement = function() {
-            if (!('speechSynthesis' in window)) {
-                alert("이 브라우저는 음성 안내(speechSynthesis)를 지원하지 않습니다.");
-                return;
-            }
+        window.testBeepAlert = function() {
             if (isMuted) {
                 isMuted = false;
                 updateMuteButtonUI();
             }
             const { remainingQty } = getQuantityStats();
-            setVoiceStatus(`안내 테스트: 잔여 ${remainingQty.toLocaleString()}주`);
-            speakText(`잔여 ${remainingQty}주`);
+            setStatusBanner(`비프음 테스트 · 잔여 ${remainingQty.toLocaleString()}주`, 'success');
+            playBeep('success');
         };
 
-        function speakText(message) {
-            if (isMuted || !('speechSynthesis' in window) || !message) return;
-
-            const runSpeak = () => {
-                try {
-                    window.speechSynthesis.cancel();
-                    const utter = new SpeechSynthesisUtterance(message);
-                    const koVoice = pickKoreanVoice();
-                    if (koVoice) {
-                        utter.voice = koVoice;
-                    }
-                    utter.lang = 'ko-KR';
-                    utter.rate = 1.05;
-                    utter.volume = 1.0;
-
-                    utter.onend = () => {
-                        isSpeakingNow = false;
-                        if (recognition && isVoiceEnabled) {
-                            setTimeout(() => {
-                                if (isVoiceEnabled && !isSpeakingNow) {
-                                    try { recognition.start(); } catch (e) {}
-                                }
-                            }, 150);
-                        }
-                    };
-
-                    utter.onerror = (err) => {
-                        console.error("TTS 재생 오류:", err);
-                        isSpeakingNow = false;
-                        if (recognition && isVoiceEnabled) {
-                            try { recognition.start(); } catch (e) {}
-                        }
-                    };
-
-                    window.speechSynthesis.speak(utter);
-                } catch (e) {
-                    isSpeakingNow = false;
-                    console.error("음성 안내 오류:", e);
-                    if (recognition && isVoiceEnabled) {
-                        try { recognition.start(); } catch (err) {}
-                    }
-                }
-            };
-
-            if (recognition && isVoiceEnabled) {
-                isSpeakingNow = true;
-                try { recognition.stop(); } catch (e) {}
-                setTimeout(runSpeak, 150);
-            } else {
-                isSpeakingNow = true;
-                runSpeak();
-            }
-        }
-
-        function setVoiceStatus(msg) {
+        function setStatusBanner(msg, styleType = 'normal') {
             const bar = document.getElementById('voice-status-bar');
             const textEl = document.getElementById('voice-status-text');
-            if (bar && textEl) {
-                bar.style.display = 'block';
-                textEl.textContent = msg;
+            if (!bar || !textEl) return;
+
+            bar.style.display = 'block';
+            textEl.textContent = msg;
+
+            bar.classList.remove('alert-success', 'alert-error');
+            if (styleType === 'success') {
+                bar.classList.add('alert-success');
+            } else if (styleType === 'error') {
+                bar.classList.add('alert-error');
+            }
+
+            if (statusHighlightTimer) {
+                clearTimeout(statusHighlightTimer);
+            }
+            if (styleType !== 'normal') {
+                statusHighlightTimer = setTimeout(() => {
+                    bar.classList.remove('alert-success', 'alert-error');
+                }, 2500);
             }
         }
+
+        // 음성 인식 (STT) 제어
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isVoiceEnabled = false;
+        let isRecognizing = false;
+        let restartTimer = null;
+        let lastCommandTime = 0;
+        let lastHandledTranscript = "";
 
         function normalizeKoreanSpeech(raw) {
             let s = (raw || "").trim().replace(/\s+/g, "");
@@ -951,11 +970,11 @@
                 lastCommandTime = now;
                 const currentTreeId = document.getElementById('treeId').value;
                 if (!currentTreeId) {
-                    setVoiceStatus(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요 (예: "15번 클릭")`);
+                    setStatusBanner(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요 (예: "15번 클릭")`, 'normal');
                     return;
                 }
                 document.getElementById('finished').value = "true";
-                setVoiceStatus(`"${transcript}" 인식 → No.${currentTreeId} 작업완료 전송 중...`);
+                setStatusBanner(`"${transcript}" 인식 → No.${currentTreeId} 작업완료 전송 중...`, 'normal');
                 sendToNotion();
                 return;
             }
@@ -965,11 +984,11 @@
                 lastCommandTime = now;
                 const currentTreeId = document.getElementById('treeId').value;
                 if (!currentTreeId) {
-                    setVoiceStatus(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요`);
+                    setStatusBanner(`"${transcript}" 인식 → 먼저 번호를 선택해 주세요`, 'normal');
                     return;
                 }
                 document.getElementById('finished').value = "false";
-                setVoiceStatus(`"${transcript}" 인식 → No.${currentTreeId} 작업취소 전송 중...`);
+                setStatusBanner(`"${transcript}" 인식 → No.${currentTreeId} 작업취소 전송 중...`, 'normal');
                 sendToNotion();
                 return;
             }
@@ -978,8 +997,8 @@
                 lastHandledTranscript = normalized;
                 lastCommandTime = now;
                 const { remainingQty } = getQuantityStats();
-                setVoiceStatus(`잔여 ${remainingQty.toLocaleString()}주`);
-                speakText(`잔여 ${remainingQty}주`);
+                setStatusBanner(`잔여 ${remainingQty.toLocaleString()}주`, 'success');
+                playBeep('info');
                 return;
             }
 
@@ -987,7 +1006,7 @@
                 lastHandledTranscript = normalized;
                 lastCommandTime = now;
                 stopBlinking();
-                setVoiceStatus(`"${transcript}" 인식 → 마커 깜빡임 중지`);
+                setStatusBanner(`"${transcript}" 인식 → 마커 깜빡임 중지`, 'normal');
                 return;
             }
 
@@ -1002,14 +1021,39 @@
                     lastHandledTranscript = normalized;
                     lastCommandTime = now;
                     selectMarkerByItem(found);
-                    setVoiceStatus(`"${transcript}" 인식 → ${found.no}번 마커 선택 및 깜빡임 시작`);
+                    setStatusBanner(`"${transcript}" 인식 → ${found.no}번 마커 선택 및 깜빡임 시작`, 'success');
+                    playBeep('info');
                 } else {
-                    setVoiceStatus(`"${transcript}" 인식 → ${targetNo}번 마커를 찾지 못했습니다.`);
+                    setStatusBanner(`"${transcript}" 인식 → ${targetNo}번 마커를 찾지 못했습니다.`, 'error');
                 }
                 return;
             }
 
-            setVoiceStatus(`인식됨: "${transcript}" (명령: "15번 클릭", "15번 작업시작", "작업완료", "남은주수")`);
+            setStatusBanner(`인식됨: "${transcript}" (명령: "15번 클릭", "15번 작업시작", "작업완료", "남은주수")`, 'normal');
+        }
+
+        function safeStartRecognition() {
+            if (!recognition || !isVoiceEnabled || isRecognizing) return;
+            try {
+                recognition.start();
+            } catch (e) {
+                if (e && e.name === 'InvalidStateError') {
+                    isRecognizing = true;
+                } else {
+                    console.error("음성 인식 시작 실패:", e);
+                }
+            }
+        }
+
+        function scheduleRecognitionRestart(delayMs = 250) {
+            if (restartTimer) {
+                clearTimeout(restartTimer);
+                restartTimer = null;
+            }
+            if (!isVoiceEnabled || isRecognizing) return;
+            restartTimer = setTimeout(() => {
+                safeStartRecognition();
+            }, delayMs);
         }
 
         function initSpeechRecognition() {
@@ -1019,34 +1063,47 @@
             rec.continuous = true;
             rec.interimResults = true;
 
+            rec.onstart = () => {
+                isRecognizing = true;
+            };
+
             rec.onresult = (event) => {
-                if (isSpeakingNow) return;
                 let latestTranscript = "";
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     latestTranscript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
                         handleVoiceCommand(latestTranscript);
                     } else {
-                        setVoiceStatus(`듣는 중: "${latestTranscript}"`);
+                        setStatusBanner(`듣는 중: "${latestTranscript}"`, 'normal');
                     }
                 }
             };
 
             rec.onerror = (event) => {
-                if (event.error === 'not-allowed') {
+                isRecognizing = false;
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
                     isVoiceEnabled = false;
+                    if (restartTimer) clearTimeout(restartTimer);
                     updateVoiceButtonUI();
-                    setVoiceStatus("마이크 권한이 거부되었습니다. 브라우저 설정에서 마이크를 허용해 주세요.");
+                    setStatusBanner("마이크 권한이 차단되었습니다. 브라우저 주소창 자물쇠에서 마이크를 허용해 주세요.", 'error');
+                } else if (event.error === 'audio-capture') {
+                    isVoiceEnabled = false;
+                    if (restartTimer) clearTimeout(restartTimer);
+                    updateVoiceButtonUI();
+                    setStatusBanner("마이크 장치를 찾을 수 없거나 다른 앱이 사용 중입니다.", 'error');
+                } else if (event.error === 'network') {
+                    setStatusBanner("네트워크 문제로 음성 인식이 일시 중단되었습니다. 재시도 중...", 'error');
+                    scheduleRecognitionRestart(800);
                 } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
-                    setVoiceStatus(`음성 인식 오류: ${event.error}`);
+                    setStatusBanner(`음성 인식 상태: ${event.error} (재연결 시도 중)`, 'normal');
+                    scheduleRecognitionRestart(400);
                 }
             };
 
             rec.onend = () => {
-                if (isVoiceEnabled && !isSpeakingNow) {
-                    try {
-                        rec.start();
-                    } catch (e) {}
+                isRecognizing = false;
+                if (isVoiceEnabled) {
+                    scheduleRecognitionRestart(250);
                 }
             };
 
@@ -1066,6 +1123,8 @@
         }
 
         window.toggleVoiceRecognition = function() {
+            ensureAudioContext();
+
             if (!SpeechRecognition) {
                 alert("이 브라우저는 음성 인식(Web Speech API)을 지원하지 않습니다. Chrome 브라우저를 사용해 주세요.");
                 return;
@@ -1082,21 +1141,19 @@
                 if (panel.classList.contains('collapsed')) {
                     togglePanel();
                 }
-                setVoiceStatus('마이크 켜짐 — "15번 클릭" 또는 "15번 작업시작" 후 "작업완료"라고 말씀해 주세요.');
-                try {
-                    recognition.start();
-                } catch (e) {
-                    console.error(e);
-                }
+                setStatusBanner('마이크 켜짐 — "15번 클릭" 또는 "15번 작업시작" 후 "작업완료"라고 말씀해 주세요.', 'normal');
+                safeStartRecognition();
             } else {
                 isVoiceEnabled = false;
+                if (restartTimer) {
+                    clearTimeout(restartTimer);
+                    restartTimer = null;
+                }
                 updateVoiceButtonUI();
-                setVoiceStatus("음성 인식이 꺼졌습니다.");
+                setStatusBanner("음성 인식이 꺼졌습니다.", 'normal');
                 try {
                     recognition.stop();
-                } catch (e) {
-                    console.error(e);
-                }
+                } catch (e) {}
             }
         };
 
