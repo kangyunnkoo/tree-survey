@@ -87,6 +87,12 @@
             border-color: #0d47a1;
         }
 
+        .map-btn.gps-active {
+            background-color: #0f766e;
+            color: #ffffff;
+            border-color: #0f766e;
+        }
+
         /* 원크기 버튼 밑 작업주수 / 작업완료주수 표시 박스 */
         .count-summary-box {
             background: #ffffff;
@@ -315,7 +321,8 @@
     <div id="map-wrapper">
         <!-- 우측 상단 제어 버튼, 옵션 및 작업/완료 주수 요약 영역 -->
         <div class="control-group">
-            <button id="zoom-btn" class="map-btn" onclick="toggleZoom()">2배 확대 (OFF)</button>
+            <button id="gps-btn" class="map-btn" type="button" onclick="toggleCurrentLocation()">현재위치 (OFF)</button>
+            <button id="zoom-btn" class="map-btn" type="button" onclick="toggleZoom()">2배 확대 (OFF)</button>
             <select id="marker-size-select" class="map-select" onchange="changeMarkerSize()">
                 <option value="16">원크기: 작게</option>
                 <option value="20" selected>원크기: 보통</option>
@@ -401,6 +408,166 @@
         });
 
         // -------------------------------------------------------------
+        // 1-1. 실시간 현재위치 추적 옵션 제어
+        // -------------------------------------------------------------
+        let isWatchingLocation = false;
+        let geoWatchId = null;
+        let currentLocationMarker = null;
+        let currentAccuracyCircle = null;
+        let lastKnownLatLng = null;
+
+        function createCurrentLocationMarkerImage() {
+            const size = 22;
+            const scale = 2;
+            const canvas = document.createElement("canvas");
+            canvas.width = size * scale;
+            canvas.height = size * scale;
+            const ctx = canvas.getContext("2d");
+            ctx.scale(scale, scale);
+
+            const r = size / 2;
+            ctx.fillStyle = "#0f766e";
+            ctx.beginPath();
+            ctx.arc(r, r, r - 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(r, r, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            return new kakao.maps.MarkerImage(
+                canvas.toDataURL("image/png"),
+                new kakao.maps.Size(size, size),
+                { offset: new kakao.maps.Point(r, r) }
+            );
+        }
+
+        function clearCurrentLocationOverlay() {
+            if (currentLocationMarker) {
+                currentLocationMarker.setMap(null);
+                currentLocationMarker = null;
+            }
+            if (currentAccuracyCircle) {
+                currentAccuracyCircle.setMap(null);
+                currentAccuracyCircle = null;
+            }
+        }
+
+        function updateGpsButtonUI() {
+            const btn = document.getElementById("gps-btn");
+            if (!btn) return;
+            if (isWatchingLocation) {
+                btn.textContent = "현재위치 (ON)";
+                btn.classList.add("gps-active");
+            } else {
+                btn.textContent = "현재위치 (OFF)";
+                btn.classList.remove("gps-active");
+            }
+        }
+
+        function stopCurrentLocationTracking(updateStatus = false) {
+            isWatchingLocation = false;
+            if (geoWatchId !== null && navigator.geolocation) {
+                navigator.geolocation.clearWatch(geoWatchId);
+                geoWatchId = null;
+            }
+            clearCurrentLocationOverlay();
+            updateGpsButtonUI();
+            if (updateStatus) {
+                setStatusBanner("실시간 현재위치 표시가 꺼졌습니다.", "normal");
+            }
+        }
+
+        window.toggleCurrentLocation = function() {
+            if (isWatchingLocation) {
+                stopCurrentLocationTracking(true);
+                return;
+            }
+
+            if (!navigator.geolocation) {
+                setStatusBanner("이 브라우저는 현재위치(GPS) 기능을 지원하지 않습니다.", "error");
+                return;
+            }
+
+            isWatchingLocation = true;
+            updateGpsButtonUI();
+            setStatusBanner("실시간 현재위치를 찾는 중...", "normal");
+
+            geoWatchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    if (!isWatchingLocation) return;
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = Math.max(5, Math.min(position.coords.accuracy || 15, 200));
+                    const pos = new kakao.maps.LatLng(lat, lng);
+                    lastKnownLatLng = pos;
+
+                    if (!currentLocationMarker) {
+                        currentLocationMarker = new kakao.maps.Marker({
+                            position: pos,
+                            image: createCurrentLocationMarkerImage(),
+                            zIndex: 20,
+                            map: map
+                        });
+                    } else {
+                        currentLocationMarker.setPosition(pos);
+                        currentLocationMarker.setMap(map);
+                    }
+
+                    if (!currentAccuracyCircle) {
+                        currentAccuracyCircle = new kakao.maps.Circle({
+                            center: pos,
+                            radius: accuracy,
+                            strokeWeight: 1.5,
+                            strokeColor: "#0f766e",
+                            strokeOpacity: 0.7,
+                            strokeStyle: "solid",
+                            fillColor: "#14b8a6",
+                            fillOpacity: 0.16,
+                            zIndex: 15,
+                            map: map
+                        });
+                    } else {
+                        currentAccuracyCircle.setPosition(pos);
+                        currentAccuracyCircle.setRadius(accuracy);
+                        currentAccuracyCircle.setMap(map);
+                    }
+
+                    if (!activeBlinkItem) {
+                        map.setCenter(pos);
+                    }
+
+                    setStatusBanner(
+                        `현재위치 추적 중 · 위도 ${lat.toFixed(5)}, 경도 ${lng.toFixed(5)} (±${Math.round(accuracy)}m)`,
+                        "normal"
+                    );
+                },
+                (err) => {
+                    let reason = "위치 정보를 가져올 수 없습니다.";
+                    if (err.code === 1) {
+                        reason = "위치 권한이 차단되었습니다. 브라우저에서 위치 접근을 허용해 주세요.";
+                    } else if (err.code === 2) {
+                        reason = "현재 위치 신호를 잡을 수 없습니다.";
+                    } else if (err.code === 3) {
+                        reason = "위치 조회 시간이 초과되었습니다.";
+                    }
+                    stopCurrentLocationTracking(false);
+                    setStatusBanner(`현재위치 오류: ${reason}`, "error");
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 1000,
+                    timeout: 10000
+                }
+            );
+        };
+
+        // -------------------------------------------------------------
         // 2. 확대/축소(Zoom) 시 화면 중심 고정 보정
         // -------------------------------------------------------------
         let zoomStartCenter = null;
@@ -421,7 +588,9 @@
         let isZoomed2X = false; 
 
         function toggleZoom() {
-            const visualCenter = map.getCenter();
+            const visualCenter = (isWatchingLocation && lastKnownLatLng && !activeBlinkItem)
+                ? lastKnownLatLng
+                : map.getCenter();
             const mapEl = document.getElementById("map");
             const zoomBtn = document.getElementById("zoom-btn");
 
@@ -860,11 +1029,9 @@
             if (isMuted) return;
             try {
                 if (mode === 'success') {
-                    // 완료: 밝고 상승하는 2음 (A5 -> D6)
                     playTone(880, 0, 0.11, 'sine', 0.25);
                     playTone(1174.66, 0.13, 0.15, 'sine', 0.25);
                 } else if (mode === 'cancel') {
-                    // 취소: 확실히 구분되는 저음 3연타 하강음 (G4 -> E4 -> C4, sawtooth)
                     playTone(392.00, 0.00, 0.09, 'sawtooth', 0.22);
                     playTone(329.63, 0.11, 0.09, 'sawtooth', 0.22);
                     playTone(261.63, 0.22, 0.16, 'sawtooth', 0.24);
