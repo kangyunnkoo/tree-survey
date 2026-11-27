@@ -37,34 +37,35 @@
             transition: transform 0.3s ease;
         }
 
-        /* 우측 상단 제어 버튼 및 옵션 그룹 스타일 (세로 배치) */
+        /* 우측 상단 제어 버튼 및 옵션 그룹 스타일 (세로 배치 - 절반 크기 축소) */
         .control-group {
             position: absolute;
-            top: 15px;
-            right: 15px;
+            top: 10px;
+            right: 10px;
             z-index: 10;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            gap: 8px;
-            width: 170px;
+            gap: 4px;
+            width: 85px;
         }
 
         .map-btn, .map-select {
             background: #ffffff;
             color: #333333;
             border: 1px solid #cccccc;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 13px;
+            padding: 4px 5px;
+            border-radius: 4px;
+            font-size: 9.5px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
             user-select: none;
             outline: none;
             width: 100%;
             box-sizing: border-box;
             text-align: center;
+            line-height: 1.2;
         }
 
         .map-select {
@@ -72,9 +73,9 @@
             appearance: none;
             background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
             background-repeat: no-repeat;
-            background-position: right 10px center;
-            background-size: 14px;
-            padding-right: 25px;
+            background-position: right 3px center;
+            background-size: 8px;
+            padding-right: 12px;
         }
 
         .map-btn:hover, .map-select:hover {
@@ -93,29 +94,29 @@
             border-color: #0f766e;
         }
 
-        /* 원크기 버튼 밑 작업주수 / 작업완료주수 표시 박스 */
+        /* 원크기 버튼 밑 작업주수 / 작업완료주수 표시 박스 (절반 크기 축소) */
         .count-summary-box {
             background: #ffffff;
             color: #1e293b;
             border: 1px solid #cbd5e1;
-            padding: 8px 10px;
-            border-radius: 6px;
-            font-size: 12px;
+            padding: 4px 4px;
+            border-radius: 4px;
+            font-size: 9px;
             font-weight: bold;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
             width: 100%;
             box-sizing: border-box;
             text-align: center;
-            line-height: 1.35;
+            line-height: 1.2;
         }
         .count-summary-label {
             display: block;
-            font-size: 11px;
+            font-size: 8px;
             color: #64748b;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
         .count-summary-value {
-            font-size: 13px;
+            font-size: 9.5px;
             color: #0d47a1;
         }
         .count-summary-done {
@@ -330,7 +331,7 @@
                 <option value="32">원크기: 아주 크게</option>
             </select>
             <div id="tree-count-box" class="count-summary-box">
-                <span class="count-summary-label">작업주수 / 작업완료주수</span>
+                <span class="count-summary-label">작업/완료주수</span>
                 <span class="count-summary-value">
                     <span id="total-qty-text">0</span> / <span id="done-qty-text" class="count-summary-done">0</span>
                 </span>
