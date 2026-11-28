@@ -50,7 +50,7 @@
       </div>
     </div>
 
-    <p class="note">사용법: Notion의 '좌표선택' 링크를 클릭하면 이 페이지가 열립니다. 주소가 전달되지 않으면 기본 중앙(서울)이 로드됩니다. 선택 후 복사하거나 저장하세요.</p>
+    <p class="note">사용법: Notion의 '좌표선택' 링크를 클릭하면 이 페이지가 열립니다. centerLat/centerLng나 주소가 전달되지 않으면 기본 중앙(서울)이 로드됩니다. 선택 후 복사하거나 저장하세요.</p>
   </div>
 
   <!-- 카카오맵 JS SDK: 'libraries=services' 포함(좌표 변환/주소 검색 등) -->
@@ -58,19 +58,28 @@
 
   <script>
   (function(){
-    // ========== 설정 (변경 금지 필요 없음) ==========
-    // URL 파라미터로 다음을 받습니다:
-    //  - address=<주소 문자열>  (url-encoded)
-    //  - id=<Notion Page ID or item id>  (선택)
-    //  - webhook=<webhook URL>  (선택) -- POST 받는 서버(Make 등)
+    // ========== 설정 ==========
+    // URL 파라미터:
+    //  - centerLat=<위도>, centerLng=<경도> (선택, 둘 다 유효할 때 우선 적용)
+    //  - address=<주소 문자열> (url-encoded)
+    //  - id=<Notion Page ID or item id> (선택)
+    //  - webhook=<webhook URL> (선택) -- POST 받는 서버(Make 등)
     //  - level=<map level> (선택, 기본 3)
-    // ================================================
+    // ==========================
 
     const params = new URLSearchParams(location.search);
+    const rawCenterLat = params.get('centerLat');
+    const rawCenterLng = params.get('centerLng');
+    const parsedCenterLat = (rawCenterLat !== null && rawCenterLat.trim() !== '') ? parseFloat(rawCenterLat) : NaN;
+    const parsedCenterLng = (rawCenterLng !== null && rawCenterLng.trim() !== '') ? parseFloat(rawCenterLng) : NaN;
+    const hasCustomCenter = Number.isFinite(parsedCenterLat) && Number.isFinite(parsedCenterLng);
+
     const address = params.get('address') ? decodeURIComponent(params.get('address')) : null;
+    const notionId = params.get('id') || null;
     const notionName = params.get('name') || null;
     const webhookUrl = params.get('webhook') || null;
     const requestedLevel = parseInt(params.get('level')) || 3; // 권장 2~3
+    const clampedLevel = Math.max(1, Math.min(8, requestedLevel));
 
     // DOM
     const mapDiv = document.getElementById('map');
@@ -79,11 +88,14 @@
     const copyBtn = document.getElementById('copyBtn');
     const sendBtn = document.getElementById('sendBtn');
 
-    // 기본 중심(서울 중간) — address 없을 때 사용
+    // 기본 중심(서울 중간) — centerLat/Lng 및 address 없을 때 사용
     const DEFAULT_CENTER = new kakao.maps.LatLng(37.566536, 126.977966);
+    const initialCenter = hasCustomCenter
+      ? new kakao.maps.LatLng(parsedCenterLat, parsedCenterLng)
+      : DEFAULT_CENTER;
 
     // 지도 옵션
-    const mapOptions = { center: DEFAULT_CENTER, level: Math.max(1, Math.min(8, requestedLevel)), draggable: true };
+    const mapOptions = { center: initialCenter, level: clampedLevel, draggable: true };
     const map = new kakao.maps.Map(mapDiv, mapOptions);
 
     // 마커(선택용)
@@ -94,35 +106,36 @@
     const geocoder = new kakao.maps.services.Geocoder();
 
     // 좌표 업데이트 helper
-    function setCoords(lat, lng) {
+    function setCoords(lat, lng, shouldMoveCenter = true) {
       const latf = Number(lat).toFixed(7);
       const lngf = Number(lng).toFixed(7);
       coordsEl.textContent = `${latf}, ${lngf}`;
       copyInput.value = `${latf},${lngf}`;
-      marker.setPosition(new kakao.maps.LatLng(lat, lng));
-      // center the map on selection (keep requested level)
-      map.setCenter(new kakao.maps.LatLng(lat, lng));
-      map.setLevel(Math.max(1, Math.min(8, requestedLevel)));
+      const targetLatLng = new kakao.maps.LatLng(lat, lng);
+      marker.setPosition(targetLatLng);
+      if (shouldMoveCenter) {
+        map.setCenter(targetLatLng);
+        map.setLevel(clampedLevel);
+      }
     }
 
-    // 1) 전달된 주소가 있으면 geocode -> center, marker
-    if (address) {
-      // 주소 디스플레이는 브라우저 콘솔에 남김 (UI에 안 보냄)
+    // 1) centerLat, centerLng가 있으면 우선 중심 지정, 없으면 address -> geocode, 둘 다 없으면 기본 중심
+    if (hasCustomCenter) {
+      setCoords(parsedCenterLat, parsedCenterLng, true);
+    } else if (address) {
       console.log('주소 파라미터:', address);
 
       geocoder.addressSearch(address, function(result, status) {
         if (status === kakao.maps.services.Status.OK && result && result[0]) {
           const y = parseFloat(result[0].y);
           const x = parseFloat(result[0].x);
-          setCoords(y, x);
+          setCoords(y, x, true);
         } else {
           console.warn('주소 변환 실패:', status);
-          // 실패 시 기본 중심 유지
           map.setCenter(DEFAULT_CENTER);
         }
       });
     } else {
-      // 주소가 없으면 기본 중심으로 세팅
       map.setCenter(DEFAULT_CENTER);
     }
 
@@ -131,7 +144,7 @@
       const latlng = mouseEvent.latLng;
       const lat = latlng.getLat();
       const lng = latlng.getLng();
-      setCoords(lat, lng);
+      setCoords(lat, lng, false);
     });
 
     // 3) 복사 버튼: 클립보드에 'lat,lng' 복사
@@ -143,7 +156,6 @@
         copyBtn.textContent = '복사됨 ✓';
         setTimeout(()=>copyBtn.textContent='복사', 1200);
       } catch (e) {
-        // fallback
         copyInput.select();
         document.execCommand('copy');
         copyBtn.textContent = '복사됨 ✓';
@@ -157,11 +169,11 @@
       if (!val) { alert('좌표를 먼저 선택해 주세요.'); return; }
       const [lat, lng] = val.split(',');
 
-      // 만약 webhook 파라미터가 주어지면 POST
       if (webhookUrl) {
         try {
           const payload = {
-            id: notionId || null,
+            id: notionId,
+            name: notionName,
             lat: lat.trim(),
             lng: lng.trim(),
             source: location.href,
@@ -183,24 +195,19 @@
           alert('전송 중 오류가 발생했습니다. (콘솔 확인)');
         }
       } else {
-        // webhook이 없으면 클립보드로 복사되었음을 알림
         try { await navigator.clipboard.writeText(val); } catch (e){ /* ignore */ }
         alert('웹훅이 설정되지 않았습니다. 좌표가 클립보드에 복사되었습니다.');
       }
     });
 
-    // 5) Optional: opener가 있을 경우(팝업으로 열었다면) 선택된 좌표를 opener로 postMessage로 보낼 수 있게 함
-    //    opener가 존재하고 메시지 수신 구현이 되어 있으면 자동 전달하도록 할 수 있음.
+    // 5) Optional: opener가 있을 경우 선택된 좌표를 postMessage로 전달
     window.addEventListener('beforeunload', function(){
       if (window.opener && copyInput.value) {
         try {
-          window.opener.postMessage({ type:'coordsSelected', coords: copyInput.value, id: notionId || null }, '*');
+          window.opener.postMessage({ type:'coordsSelected', coords: copyInput.value, id: notionId }, '*');
         } catch(e){}
       }
     });
-
-    // UX: 지도의 zoom이나 center 강제: 권장 레벨 2~3으로 고정하려면 아래 주석 해제
-    // map.setLevel(3); // 강제 고정(원하면 사용)
   })();
   </script>
 </body>
